@@ -488,20 +488,32 @@ let DEMO_MODE = !getFirebaseConfig();
 let db = null;
 let fbApp = null;
 
+// Module-level Firestore function references
+let fbCollection, fbDoc, fbGetDocs, fbSetDoc, fbUpdateDoc, fbDeleteDoc;
+
 async function initFirebase() {
   const cfg = getFirebaseConfig();
   if (!cfg) { DEMO_MODE = true; return; }
   try {
     const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const { getFirestore, collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy }
-      = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const fs = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
 
     fbApp = getApps().length ? getApps()[0] : initializeApp(cfg);
     db = getFirestore(fbApp);
 
-    // Expose Firestore helpers globally for use in actions
-    window._fb = { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy };
+    // Store Firestore helpers at module level — avoids window._fb scoping issues
+    fbCollection = fs.collection;
+    fbDoc        = fs.doc;
+    fbGetDocs    = fs.getDocs;
+    fbSetDoc     = fs.setDoc;
+    fbUpdateDoc  = fs.updateDoc;
+    fbDeleteDoc  = fs.deleteDoc;
+
+    // Keep getFirestore accessible
+    function getFirestore(app) { return fs.getFirestore(app); }
+
     DEMO_MODE = false;
+    console.log('Firebase initialised OK, db:', db);
   } catch(e) {
     console.error('Firebase init failed:', e);
     DEMO_MODE = true;
@@ -1552,9 +1564,9 @@ window.saveEntry = async () => {
     if (idx >= 0) state.entries[idx] = updated;
     if (!DEMO_MODE && db) {
       try {
-        const { doc, setDoc } = window._fb;
-        await setDoc(doc(db, 'entries', entry.id), updated);
-      } catch(e) { showToast('Save failed: ' + e.message); return; }
+        await fbSetDoc(fbDoc(db, 'entries', entry.id), updated);
+        console.log('Entry updated in Firestore:', entry.id);
+      } catch(e) { console.error('Entry update failed:', e); showToast('Save failed: ' + e.message); return; }
     }
     showToast('Entry updated');
   } else {
@@ -1563,9 +1575,9 @@ window.saveEntry = async () => {
     state.entries.push(newEntry);
     if (!DEMO_MODE && db) {
       try {
-        const { doc, setDoc } = window._fb;
-        await setDoc(doc(db, 'entries', id), newEntry);
-      } catch(e) { showToast('Save failed: ' + e.message); return; }
+        await fbSetDoc(fbDoc(db, 'entries', id), newEntry);
+        console.log('Entry saved to Firestore:', id);
+      } catch(e) { console.error('Entry save failed:', e); showToast('Save failed: ' + e.message); return; }
     }
     showToast('Entry saved');
   }
@@ -1589,9 +1601,9 @@ window.deleteEntry = async (id) => {
   state.screen = 'entries';
   if (!DEMO_MODE && db) {
     try {
-      const { doc, deleteDoc } = window._fb;
-      await deleteDoc(doc(db, 'entries', id));
-    } catch(e) { showToast('Delete failed: ' + e.message); return; }
+      await fbDeleteDoc(fbDoc(db, 'entries', id));
+      console.log('Entry deleted from Firestore:', id);
+    } catch(e) { console.error('Entry delete failed:', e); showToast('Delete failed: ' + e.message); return; }
   }
   showToast('Entry deleted');
   render();
@@ -1643,9 +1655,9 @@ window.saveUser = async (id) => {
       state.users[idx] = updated;
       if (!DEMO_MODE && db) {
         try {
-          const { doc, setDoc } = window._fb;
-          await setDoc(doc(db, 'users', id), updated);
-        } catch(e) { showToast('Save failed: ' + e.message); return; }
+          await fbSetDoc(fbDoc(db, 'users', id), updated);
+          console.log('User updated in Firestore:', id);
+        } catch(e) { console.error('User update failed:', e); showToast('Save failed: ' + e.message); return; }
       }
     }
     showToast('User updated');
@@ -1664,9 +1676,9 @@ window.saveUser = async (id) => {
     state.users.push(newUser);
     if (!DEMO_MODE && db) {
       try {
-        const { doc, setDoc } = window._fb;
-        await setDoc(doc(db, 'users', newId), newUser);
-      } catch(e) { showToast('Save failed: ' + e.message); return; }
+        await fbSetDoc(fbDoc(db, 'users', newId), newUser);
+        console.log('New user saved to Firestore:', newId);
+      } catch(e) { console.error('User save failed:', e); showToast('Save failed: ' + e.message); return; }
     }
     showToast('User added');
   }
@@ -1681,9 +1693,9 @@ window.removeUser = async (id) => {
     state.users[idx].active = false;
     if (!DEMO_MODE && db) {
       try {
-        const { doc, updateDoc } = window._fb;
-        await updateDoc(doc(db, 'users', id), { active: false });
-      } catch(e) { showToast('Remove failed: ' + e.message); return; }
+        await fbUpdateDoc(fbDoc(db, 'users', id), { active: false });
+        console.log('User deactivated in Firestore:', id);
+      } catch(e) { console.error('User remove failed:', e); showToast('Remove failed: ' + e.message); return; }
     }
   }
   showToast('User removed');
@@ -1711,9 +1723,9 @@ window.doAdminResetPin = async (uid) => {
     state.users[idx].pin = pin;
     if (!DEMO_MODE && db) {
       try {
-        const { doc, updateDoc } = window._fb;
-        await updateDoc(doc(db, 'users', uid), { pin });
-      } catch(e) { showToast('Reset failed: ' + e.message); return; }
+        await fbUpdateDoc(fbDoc(db, 'users', uid), { pin });
+        console.log('PIN reset in Firestore:', uid);
+      } catch(e) { console.error('PIN reset failed:', e); showToast('Reset failed: ' + e.message); return; }
     }
   }
   showToast('PIN reset successfully');
@@ -1738,9 +1750,9 @@ window.doChangePin = async () => {
     state.currentUser.pin = newPin;
     if (!DEMO_MODE && db) {
       try {
-        const { doc, updateDoc } = window._fb;
-        await updateDoc(doc(db, 'users', state.currentUser.id), { pin: newPin });
-      } catch(e) { showToast('Save failed: ' + e.message); return; }
+        await fbUpdateDoc(fbDoc(db, 'users', state.currentUser.id), { pin: newPin });
+        console.log('PIN changed in Firestore:', state.currentUser.id);
+      } catch(e) { console.error('PIN change failed:', e); showToast('Save failed: ' + e.message); return; }
     }
   }
   showToast('PIN changed successfully');
@@ -1966,9 +1978,11 @@ window.saveFirebaseConfig = async function() {
   localStorage.setItem('ts_firebase', JSON.stringify(cfg));
   showToast('Saved — connecting to Firebase…');
   await initFirebase();
-  if (!DEMO_MODE) {
+  if (!DEMO_MODE && db) {
     await loadFirebaseData();
     showToast('Firebase connected ✓');
+  } else {
+    showToast('Connection failed — check keys and retry');
   }
   render();
 };
@@ -1986,17 +2000,18 @@ window.clearFirebaseConfig = function() {
 async function loadFirebaseData() {
   if (!db) return;
   try {
-    const { collection, getDocs } = window._fb;
     state.loading = true; render();
     const [uSnap, eSnap] = await Promise.all([
-      getDocs(collection(db, 'users')),
-      getDocs(collection(db, 'entries'))
+      fbGetDocs(fbCollection(db, 'users')),
+      fbGetDocs(fbCollection(db, 'entries'))
     ]);
     state.users   = uSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.entries = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.loading = false;
+    console.log('Loaded from Firestore:', state.users.length, 'users,', state.entries.length, 'entries');
   } catch(e) {
     state.loading = false;
+    console.error('loadFirebaseData failed:', e);
     showToast('Failed to load data: ' + e.message);
   }
 }
