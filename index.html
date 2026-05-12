@@ -467,7 +467,20 @@
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app">
+  <div id="boot-screen" style="position:fixed;inset:0;background:linear-gradient(160deg,#5E3FA3 0%,#3A1F7A 40%,#1A0F3E 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;">
+    <svg width="64" height="64" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:64px;height:64px;">
+      <rect width="40" height="40" rx="12" fill="url(#bl1)"/>
+      <circle cx="20" cy="20" r="11" stroke="white" stroke-width="2.5" fill="none" opacity="0.9"/>
+      <line x1="20" y1="9" x2="20" y2="20" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="20" y1="20" x2="26" y2="25" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="20" cy="20" r="2" fill="white"/>
+      <defs><linearGradient id="bl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
+    </svg>
+    <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;margin-top:16px;">TimeShift</div>
+    <div style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.55);margin-top:8px;">Loading…</div>
+  </div>
+</div>
 
 <script type="module">
 // ════════════════════════════════════════════════════════════
@@ -477,7 +490,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '1.8';
+const APP_VERSION = '2.0';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -2067,16 +2080,6 @@ function showToast(msg) {
 function render() {
   const app = document.getElementById('app');
 
-  // Loading overlay
-  if (state.loading) {
-    app.innerHTML = `<div class="offline-screen">
-      ${logoSVG(56)}
-      <h2 style="margin-top:16px;">Loading…</h2>
-      <p>Connecting to Firebase</p>
-    </div>`;
-    return;
-  }
-
   // Offline blocker — always shown if offline (except on pin screen during first load)
   if (state.online === false) {
     app.innerHTML = `<div class="offline-screen">
@@ -2222,32 +2225,6 @@ async function loadFirebaseData() {
 // ═══════════════════════════════════
 // AUDIT EXPORT
 // ═══════════════════════════════════
-window.exportAuditLog = function() {
-  const cutoff = state.auditCutoffDate;
-  const toExport = state.auditLog.filter(e => (e.ts||'') < cutoff);
-  if (!toExport.length) { showToast('No entries before ' + cutoff); return; }
-  if (!confirm(`Export ${toExport.length} entries before ${cutoff} as CSV, then remove from active view?`)) return;
-
-  const rows = ['ID,Timestamp,User,Role,Action,Detail,Before,After'];
-  toExport.forEach(e => {
-    const esc = v => '"' + (v||'').toString().replace(/"/g,'""') + '"';
-    rows.push([esc(e.id),esc(e.ts),esc(e.user),esc(e.role),esc(e.action),esc(e.detail),
-               esc(e.before?JSON.stringify(e.before):''),esc(e.after?JSON.stringify(e.after):'')].join(','));
-  });
-  const csv = rows.join('
-');
-  const ts = new Date().toISOString().slice(0,10);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], {type:'text/plain'}));
-  a.download = `timeshift-audit-${ts}.csv`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
-
-  // Remove from active state (Firestore retains them permanently)
-  state.auditLog = state.auditLog.filter(e => (e.ts||'') >= cutoff);
-  auditLog('AUDIT_EXPORT', `Exported ${toExport.length} entries before ${cutoff}`);
-  showToast(`${toExport.length} entries exported`);
-  render();
-};
 
 // ═══════════════════════════════════
 // BACKUP & RESTORE
@@ -2377,9 +2354,7 @@ window.addEventListener('offline', () => { state.online = false; render(); });
 // INIT
 // ═══════════════════════════════════
 async function init() {
-  // Show loading screen immediately
-  state.loading = true;
-  render();
+  // Boot screen is already showing via static HTML — no render() needed yet
 
   // Connect to Firebase
   await initFirebase();
@@ -2391,6 +2366,10 @@ async function init() {
   }
 
   state.loading = false;
+
+  // Remove static boot screen and show the real app
+  const boot = document.getElementById('boot-screen');
+  if (boot) boot.remove();
 
   // Now check connectivity and show PIN screen
   checkOnline();
