@@ -477,7 +477,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '1.2';
+const APP_VERSION = '1.3';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -1636,20 +1636,26 @@ window.setAdminMonth = (m, y) => { state.adminReportMonth = m; state.adminReport
 window.setAdminReportUser = (uid) => { state.adminReportUser = uid; render(); };
 
 window.syncAllUsers = async () => {
-  if (!db) { showToast('Firebase not connected'); return; }
-  showToast('Syncing users…');
+  if (!db) { showToast('db is null — not connected'); return; }
+  if (!fbSetDoc || !fbDoc) { showToast('Firebase functions not ready'); return; }
+  const active = state.users.filter(u => u.active);
+  showToast(`Syncing ${active.length} users…`);
   let ok = 0;
-  for (const user of state.users) {
+  for (const user of active) {
     try {
-      await fbSetDoc(fbDoc(db, 'users', user.id), user);
+      // Strip any undefined values which Firestore rejects
+      const clean = JSON.parse(JSON.stringify(user));
+      await fbSetDoc(fbDoc(db, 'users', clean.id), clean);
       ok++;
     } catch(e) {
-      showToast('Failed on ' + user.name + ': ' + e.message);
+      state.fbStatus = `Sync failed on ${user.name}: ${e.message}`;
+      showToast(`Failed: ${e.message}`);
+      render();
       return;
     }
   }
-  state.fbStatus = `Synced ${ok} users to Firestore ✓`;
-  showToast(`${ok} users synced ✓`);
+  state.fbStatus = `Synced ${ok} of ${active.length} users to Firestore ✓`;
+  showToast(`${ok} users synced to Firebase ✓`);
   render();
 };
 
