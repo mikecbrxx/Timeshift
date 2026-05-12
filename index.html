@@ -477,7 +477,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '1.4';
+const APP_VERSION = '1.7';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -553,6 +553,10 @@ let state = {
   adminReportYear: new Date().getFullYear(),
   loading: false,
   fbStatus: '',
+  auditLog: [],
+  auditCutoffDate: new Date().toISOString().slice(0,10),
+  lastBackupDate: null,
+  backupReminderDays: 7,
 };
 
 // ═══════════════════════════════════
@@ -723,6 +727,12 @@ function tryLogin(pin) {
   const user = state.users.find(u => u.pin === pin && u.active);
   if (user) {
     state.currentUser = user;
+    auditLog('LOGIN', 'User logged in');
+    if (user.role === 'admin') setTimeout(checkBackupReminder, 1500);
+    // Reload all data fresh from Firebase on every login
+    if (!DEMO_MODE && db) {
+      loadFirebaseData().then(() => render());
+    }
     state.screen = 'home';
     state.pinInput = '';
     state.pinError = '';
@@ -735,6 +745,7 @@ function tryLogin(pin) {
 }
 
 function logout() {
+  auditLog('LOGOUT', 'User logged out');
   state.currentUser = null;
   state.screen = 'pin';
   state.pinInput = '';
@@ -789,6 +800,8 @@ const icons = {
   exit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  audit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+  backup: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>`,
 };
 
 // ═══════════════════════════════════
@@ -803,7 +816,7 @@ function renderNav() {
   const u = state.currentUser;
   if (!u) return '';
   const adminExtra = u.role === 'admin'
-    ? navBtn('users', 'users', 'Users') + navBtn('admin-reports', 'eye', 'Admin') + navBtn('settings', 'key', 'Config')
+    ? navBtn('users', 'users', 'Users') + navBtn('admin-reports', 'eye', 'Admin') + navBtn('audit', 'audit', 'Audit') + navBtn('backup', 'backup', 'Backup') + navBtn('settings', 'key', 'Config')
     : '';
   return `<div class="bottom-nav">
     ${navBtn('home','home','Home')}
@@ -1307,8 +1320,104 @@ function renderUsers() {
       <button class="btn btn-primary btn-sm" onclick="openAddUser()">${icons.plus} Add User</button>
     </div>
     <div class="page-pad">
-      ${!DEMO_MODE && db ? `<button class="btn btn-teal btn-full mb-4" onclick="syncAllUsers()">${icons.refresh} Sync All Users to Firebase</button>` : ''}
       ${cards}
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ═══════════════════════════════════
+// AUDIT TRAIL SCREEN
+// ═══════════════════════════════════
+function renderAudit() {
+  const sorted = [...state.auditLog].sort((a,b) => (b.ts||'').localeCompare(a.ts||''));
+  const cutoff = state.auditCutoffDate;
+
+  const rows = sorted.length ? sorted.map(e => {
+    const d = new Date(e.ts);
+    const dateStr = d.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+    const timeStr = d.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+    const actionColors = {
+      LOGIN:'#52C97E', LOGOUT:'#A89BC2', ENTRY_ADD:'#00B4C5', ENTRY_EDIT:'#FFB347',
+      ENTRY_DELETE:'#FF6B8A', USER_ADD:'#7C5CBF', USER_EDIT:'#FFB347', USER_DELETE:'#FF6B8A',
+      PIN_CHANGE:'#FFB347', PIN_RESET:'#FFB347', CONFIG_SAVE:'#7C5CBF',
+      BACKUP_EXPORT:'#52C97E', BACKUP_RESTORE:'#FF6B8A', AUDIT_EXPORT:'#A89BC2'
+    };
+    const col = actionColors[e.action] || 'var(--text3)';
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:11px;">
+      <div class="flex-between">
+        <span style="font-weight:700;color:${col};font-size:10px;letter-spacing:0.3px;">${e.action}</span>
+        <span style="font-size:10px;color:var(--text3);">${dateStr} ${timeStr}</span>
+      </div>
+      <div style="color:var(--text);margin-top:2px;">${e.detail}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:1px;">${e.user}${e.role ? ' ['+e.role+']' : ''}</div>
+      ${e.before ? `<div style="font-size:10px;color:var(--text3);">Before: ${JSON.stringify(e.before)}</div>` : ''}
+      ${e.after  ? `<div style="font-size:10px;color:var(--text3);">After: ${JSON.stringify(e.after)}</div>`  : ''}
+    </div>`;
+  }).join('') : `<div class="empty">${icons.audit}<p>No audit entries yet</p></div>`;
+
+  return `
+    <div class="section-head">
+      <div><h2>Audit Trail</h2><div class="sub">${sorted.length} entries · admin only</div></div>
+    </div>
+    <div class="page-pad">
+      <div class="card card-sm mb-4" style="background:var(--bg2);">
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Export entries up to date</label>
+          <input type="date" id="audit-cutoff" value="${cutoff}" max="${new Date().toISOString().slice(0,10)}"
+            onchange="state.auditCutoffDate=this.value;render()"/>
+        </div>
+        <div class="flex-row" style="gap:8px;">
+          <button class="btn btn-teal btn-sm" style="flex:1;" onclick="exportAuditPDF()">
+            ${icons.download} Export PDF
+          </button>
+          <button class="btn btn-danger btn-sm" style="flex:1;" onclick="clearAuditLog()">
+            ${icons.trash} Clear to Date
+          </button>
+        </div>
+        <div class="text-xs text-muted" style="margin-top:6px;">Clear removes entries from app and Firebase permanently.</div>
+      </div>
+      ${rows}
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ═══════════════════════════════════
+// BACKUP & RESTORE SCREEN
+// ═══════════════════════════════════
+function renderBackup() {
+  const lastBackup = state.lastBackupDate
+    ? new Date(state.lastBackupDate).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    : 'Never';
+  return `
+    <div class="section-head">
+      <div><h2>Backup &amp; Restore</h2><div class="sub">Admin only</div></div>
+    </div>
+    <div class="page-pad">
+      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E6F9EF,#E0F7FA);border-color:#52C97E;">
+        <div class="fw-700 text-sm" style="color:#1A7A42;">Last backup</div>
+        <div class="text-xs text-muted mt-1">${lastBackup}</div>
+      </div>
+      <div class="form-group mb-4">
+        <label>Backup reminder (days, 0 to disable)</label>
+        <input type="number" id="backup-days" min="0" max="365" value="${state.backupReminderDays}" style="width:100px;"/>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="saveBackupSettings()">Save</button>
+      </div>
+      <button class="btn btn-primary btn-full mb-4" onclick="exportBackup()">
+        ${icons.download} Export Backup Now
+      </button>
+      <div class="card card-sm" style="background:var(--bg2);border-color:var(--border);">
+        <div class="fw-700 text-sm mb-4" style="margin-bottom:8px;color:var(--coral-dark);">⚠ Restore from Backup</div>
+        <div class="text-xs text-muted" style="margin-bottom:10px;line-height:1.7;">
+          This will overwrite ALL current data including Firestore. Use only to recover from a problem.
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Select backup JSON file</label>
+          <input type="file" id="restore-file" accept=".json" style="font-size:12px;padding:4px 0;background:none;border:none;"/>
+        </div>
+        <button class="btn btn-danger btn-full" onclick="restoreBackup()">
+          ⚠ Restore from File
+        </button>
+      </div>
     </div>
     <div style="height:20px;"></div>`;
 }
@@ -1593,6 +1702,7 @@ window.saveEntry = async () => {
         console.log('Entry saved to Firestore:', id);
       } catch(e) { console.error('Entry save failed:', e); showToast('Save failed: ' + e.message); return; }
     }
+    auditLog('ENTRY_ADD', `Shift logged for ${date}: ${validShifts.map(s=>s.start+'-'+s.end).join(', ')} = ${formatMins(total)}`);
     showToast('Entry saved');
   }
   state.modalData = {};
@@ -1610,6 +1720,8 @@ window.editEntry = (id) => {
 
 window.deleteEntry = async (id) => {
   if (!confirm('Delete this entry?')) return;
+  const delEntry = state.entries.find(e => e.id === id);
+  if (delEntry) auditLog('ENTRY_DELETE', `Entry deleted for ${delEntry.date}`);
   state.entries = state.entries.filter(e => e.id !== id);
   state.modalData = {};
   state.screen = 'entries';
@@ -1697,6 +1809,7 @@ window.saveUser = async (id) => {
           console.log('User updated in Firestore:', id);
         } catch(e) { console.error('User update failed:', e); showToast('Save failed: ' + e.message); return; }
       }
+      auditLog('USER_EDIT', `User updated: ${name}`);
     }
     showToast('User updated');
   } else {
@@ -1718,6 +1831,7 @@ window.saveUser = async (id) => {
         console.log('New user saved to Firestore:', newId);
       } catch(e) { console.error('User save failed:', e); showToast('Save failed: ' + e.message); return; }
     }
+    auditLog('USER_ADD', `New user added: ${name} [${role}]`);
     showToast('User added');
   }
   closeModal();
@@ -1765,6 +1879,7 @@ window.doAdminResetPin = async (uid) => {
         console.log('PIN reset in Firestore:', uid);
       } catch(e) { console.error('PIN reset failed:', e); showToast('Reset failed: ' + e.message); return; }
     }
+    auditLog('PIN_RESET', `PIN reset for user: ${state.users.find(u=>u.id===uid)?.name||uid}`);
   }
   showToast('PIN reset successfully');
   closeModal();
@@ -1792,6 +1907,7 @@ window.doChangePin = async () => {
         console.log('PIN changed in Firestore:', state.currentUser.id);
       } catch(e) { console.error('PIN change failed:', e); showToast('Save failed: ' + e.message); return; }
     }
+    auditLog('PIN_CHANGE', 'User changed their own PIN');
   }
   showToast('PIN changed successfully');
   closeModal();
@@ -1984,6 +2100,8 @@ function render() {
     case 'users': screenContent = renderUsers(); break;
     case 'admin-reports': screenContent = renderAdminReports(); break;
     case 'settings': screenContent = renderSettings(); break;
+    case 'audit': screenContent = renderAudit(); break;
+    case 'backup': screenContent = renderBackup(); break;
     default: screenContent = renderHome();
   }
 
@@ -1995,6 +2113,30 @@ function render() {
     ${renderProfileMenu()}
     ${state.toast ? `<div class="toast">${state.toast}</div>` : ''}
   `;
+}
+
+// ═══════════════════════════════════
+// AUDIT
+// ═══════════════════════════════════
+function tsNow() { return new Date().toISOString(); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function auditLog(action, detail, before, after) {
+  const entry = {
+    id: uid(),
+    ts: tsNow(),
+    user: state.currentUser ? state.currentUser.name : 'system',
+    role: state.currentUser ? state.currentUser.role : '',
+    action,
+    detail
+  };
+  if (before !== undefined) entry.before = before;
+  if (after !== undefined) entry.after = after;
+  state.auditLog.push(entry);
+  // Write to Firestore asynchronously — fire and forget
+  if (!DEMO_MODE && db && fbSetDoc && fbDoc) {
+    fbSetDoc(fbDoc(db, 'audit', entry.id), entry).catch(e => console.error('Audit write failed:', e));
+  }
 }
 
 // ═══════════════════════════════════
@@ -2018,6 +2160,7 @@ window.saveFirebaseConfig = async function() {
   await initFirebase();
   if (!DEMO_MODE && db) {
     await loadFirebaseData();
+    auditLog('CONFIG_SAVE', 'Firebase configuration saved and connected');
     showToast('Firebase connected ✓');
   } else {
     showToast('Connection failed — check keys and retry');
@@ -2044,6 +2187,8 @@ window.clearFirebaseConfig = function() {
   if (!confirm('Clear Firebase config? App will return to demo mode.')) return;
   localStorage.removeItem('ts_firebase');
   db = null; fbApp = null; DEMO_MODE = true;
+  // Reset all data to demo
+  state.users = []; state.entries = []; state.auditLog = [];
   initDemoData();
   showToast('Cleared — running in demo mode');
   render();
@@ -2051,21 +2196,144 @@ window.clearFirebaseConfig = function() {
 
 // Load all users and entries from Firestore into state
 async function loadFirebaseData() {
+  // Always fetches live from Firebase — nothing is stored locally.
+  // This ensures all users always see up-to-date data.
   if (!db) return;
   try {
     state.loading = true; render();
-    const [uSnap, eSnap] = await Promise.all([
+    const [uSnap, eSnap, aSnap] = await Promise.all([
       fbGetDocs(fbCollection(db, 'users')),
-      fbGetDocs(fbCollection(db, 'entries'))
+      fbGetDocs(fbCollection(db, 'entries')),
+      fbGetDocs(fbCollection(db, 'audit'))
     ]);
-    state.users   = uSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    state.entries = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    state.loading = false;
-    console.log('Loaded from Firestore:', state.users.length, 'users,', state.entries.length, 'entries');
+    state.users    = uSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.active !== false);
+    state.entries  = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.auditLog = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.loading  = false;
+    console.log('Loaded from Firebase:', state.users.length, 'users,', state.entries.length, 'entries,', state.auditLog.length, 'audit entries');
   } catch(e) {
     state.loading = false;
     console.error('loadFirebaseData failed:', e);
-    showToast('Failed to load data: ' + e.message);
+    showToast('Failed to load: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════
+// AUDIT EXPORT
+// ═══════════════════════════════════
+window.exportAuditLog = function() {
+  const cutoff = state.auditCutoffDate;
+  const toExport = state.auditLog.filter(e => (e.ts||'') < cutoff);
+  if (!toExport.length) { showToast('No entries before ' + cutoff); return; }
+  if (!confirm(`Export ${toExport.length} entries before ${cutoff} as CSV, then remove from active view?`)) return;
+
+  const rows = ['ID,Timestamp,User,Role,Action,Detail,Before,After'];
+  toExport.forEach(e => {
+    const esc = v => '"' + (v||'').toString().replace(/"/g,'""') + '"';
+    rows.push([esc(e.id),esc(e.ts),esc(e.user),esc(e.role),esc(e.action),esc(e.detail),
+               esc(e.before?JSON.stringify(e.before):''),esc(e.after?JSON.stringify(e.after):'')].join(','));
+  });
+  const csv = rows.join('
+');
+  const ts = new Date().toISOString().slice(0,10);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/plain'}));
+  a.download = `timeshift-audit-${ts}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+
+  // Remove from active state (Firestore retains them permanently)
+  state.auditLog = state.auditLog.filter(e => (e.ts||'') >= cutoff);
+  auditLog('AUDIT_EXPORT', `Exported ${toExport.length} entries before ${cutoff}`);
+  showToast(`${toExport.length} entries exported`);
+  render();
+};
+
+// ═══════════════════════════════════
+// BACKUP & RESTORE
+// ═══════════════════════════════════
+window.exportBackup = function() {
+  const now = new Date();
+  const pad = (n,w) => String(n).padStart(w,'0');
+  const ts = pad(now.getFullYear(),4)+pad(now.getMonth()+1,2)+pad(now.getDate(),2)
+           + '-'+pad(now.getHours(),2)+pad(now.getMinutes(),2)+pad(now.getSeconds(),2);
+  const filename = `timeshift-backup-${ts}.json`;
+  const data = {
+    version: APP_VERSION,
+    exportedAt: now.toISOString(),
+    users: state.users,
+    entries: state.entries,
+    auditLog: state.auditLog,
+    backupReminderDays: state.backupReminderDays
+  };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}));
+  a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  state.lastBackupDate = now.toISOString();
+  auditLog('BACKUP_EXPORT', `Backup exported: ${filename}`);
+  showToast('Backup exported ✓');
+  render();
+};
+
+window.restoreBackup = async function() {
+  const fi = document.getElementById('restore-file');
+  if (!fi || !fi.files || !fi.files.length) { showToast('Please select a backup file first'); return; }
+  const confirm1 = prompt('WARNING: This will overwrite ALL data including Firestore.\nType CONFIRM to proceed:');
+  if (confirm1 !== 'CONFIRM') { showToast('Restore cancelled'); return; }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const restored = JSON.parse(e.target.result);
+      if (!restored.users || !restored.entries) { showToast('Invalid backup file'); return; }
+
+      // Restore to state
+      state.users    = restored.users    || [];
+      state.entries  = restored.entries  || [];
+      state.auditLog = restored.auditLog || [];
+      state.backupReminderDays = restored.backupReminderDays || 7;
+
+      // Write everything back to Firestore
+      if (!DEMO_MODE && db) {
+        showToast('Restoring to Firebase…');
+        const writes = [];
+        state.users.forEach(u   => writes.push(fbSetDoc(fbDoc(db,'users',u.id), u)));
+        state.entries.forEach(en => writes.push(fbSetDoc(fbDoc(db,'entries',en.id), en)));
+        state.auditLog.forEach(a => writes.push(fbSetDoc(fbDoc(db,'audit',a.id), a)));
+        await Promise.all(writes);
+      }
+      auditLog('BACKUP_RESTORE', 'Data restored from backup file');
+      showToast('Restore complete ✓');
+      render();
+    } catch(err) {
+      showToast('Restore failed: ' + err.message);
+    }
+  };
+  reader.readAsText(fi.files[0]);
+};
+
+window.saveBackupSettings = function() {
+  const days = parseInt(document.getElementById('backup-days').value) || 7;
+  state.backupReminderDays = days;
+  showToast(`Reminder set to every ${days} days`);
+  render();
+};
+
+function checkBackupReminder() {
+  if (!state.backupReminderDays || state.backupReminderDays === 0) return;
+  if (!state.lastBackupDate) {
+    // Never backed up
+    setTimeout(() => {
+      if (confirm('No backup has ever been made.\nExport a backup now?')) exportBackup();
+    }, 2000);
+    return;
+  }
+  const last = new Date(state.lastBackupDate);
+  const daysSince = Math.floor((Date.now() - last.getTime()) / 86400000);
+  if (daysSince >= state.backupReminderDays) {
+    setTimeout(() => {
+      if (confirm(`Backup reminder: last backup was ${daysSince} days ago.\nExport a backup now?`)) exportBackup();
+    }, 2000);
   }
 }
 
@@ -2081,9 +2349,15 @@ window.checkOnline = function() {
     .catch(() => { state.online = false; render(); });
 };
 
-window.refreshApp = function() {
+window.refreshApp = async function() {
   checkOnline();
-  showToast('Refreshed');
+  if (!DEMO_MODE && db) {
+    await loadFirebaseData();
+    showToast('Data refreshed from Firebase');
+  } else {
+    showToast('Refreshed');
+  }
+  render();
 };
 
 window.exitApp = function() {
@@ -2099,10 +2373,11 @@ window.addEventListener('offline', () => { state.online = false; render(); });
 // INIT
 // ═══════════════════════════════════
 async function init() {
-  initDemoData();          // always load demo data as baseline
   await initFirebase();    // attempt Firebase connection
   if (!DEMO_MODE && db) {
-    await loadFirebaseData(); // replace demo data with live data
+    await loadFirebaseData(); // load all live data from Firebase
+  } else {
+    initDemoData();        // only use demo data if Firebase not configured
   }
   checkOnline();           // sets state.online then calls render()
 }
