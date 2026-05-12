@@ -519,17 +519,32 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.2';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
-// Loaded from localStorage (set via Admin → Config screen)
-// Falls back to DEMO_MODE if not configured
+// Hardcoded credentials — safe to include (public anon keys only)
+// localStorage override allows changing via Config screen without redeploying
+const FIREBASE_DEFAULT = {
+  apiKey: "AIzaSyCklMcExxEdqRhYTB2tHvJaEMKXizZ57Bg",
+  projectId: "timeshift-94a91",
+  appId: "1:346775746369:web:db1718f0350894f34fd3c0",
+  authDomain: "timeshift-94a91.firebaseapp.com",
+  storageBucket: "timeshift-94a91.appspot.com",
+  messagingSenderId: "346775746369"
+};
+
 function getFirebaseConfig() {
-  try { return JSON.parse(localStorage.getItem('ts_firebase') || 'null'); } catch { return null; }
+  // localStorage override takes priority (set via Config screen)
+  // Falls back to hardcoded defaults — never null if defaults are set
+  try {
+    const stored = JSON.parse(localStorage.getItem('ts_firebase') || 'null');
+    return stored || FIREBASE_DEFAULT;
+  } catch { return FIREBASE_DEFAULT; }
 }
 
 // ── DEMO MODE (runs without Firebase) ─────────────────────
-let DEMO_MODE = !getFirebaseConfig();
+// Only true if FIREBASE_DEFAULT is deliberately cleared
+let DEMO_MODE = false;
 
 // ── FIREBASE SDK (loaded dynamically when config exists) ──
 let db = null;
@@ -2459,13 +2474,9 @@ window.saveFirebaseConfig = async function() {
 
 
 window.clearFirebaseConfig = function() {
-  if (!confirm('Clear Firebase config? App will return to demo mode.')) return;
+  if (!confirm('Clear override? App will revert to default hardcoded credentials.')) return;
   localStorage.removeItem('ts_firebase');
-  db = null; fbApp = null; DEMO_MODE = true;
-  // Reset all data to demo
-  state.users = []; state.entries = []; state.auditLog = [];
-  initDemoData();
-  showToast('Cleared — running in demo mode');
+  showToast('Override cleared — using default credentials');
   render();
 };
 
