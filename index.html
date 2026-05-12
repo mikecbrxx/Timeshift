@@ -490,7 +490,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '2.5';
+const APP_VERSION = '2.6';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -565,6 +565,7 @@ let state = {
   adminReportMonth: new Date().getMonth(),
   adminReportYear: new Date().getFullYear(),
   adminReportTab: 'month',
+  reportViewMode: 'own',  // 'own' or 'staff'
   adminSelectedUsers: [],  // empty = all users
   loading: false,
   fbStatus: '',
@@ -832,15 +833,13 @@ function navBtn(id, icon, label) {
 function renderNav() {
   const u = state.currentUser;
   if (!u) return '';
-  const adminExtra = u.role === 'admin'
-    ? navBtn('users', 'users', 'Users') + navBtn('admin-reports', 'eye', 'Admin') + navBtn('audit', 'audit', 'Audit') + navBtn('backup', 'backup', 'Backup') + navBtn('settings', 'key', 'Config')
-    : '';
+  const adminConfig = u.role === 'admin' ? navBtn('config','settings','Config') : '';
   return `<div class="bottom-nav">
     ${navBtn('home','home','Home')}
     ${navBtn('log','plus','Log')}
     ${navBtn('entries','list','Entries')}
     ${navBtn('reports','chart','Reports')}
-    ${adminExtra}
+    ${adminConfig}
   </div>`;
 }
 
@@ -1231,17 +1230,25 @@ function renderReports() {
 
   const tab = state.reportTab;
   return `
-    <div class="section-head"><div><h2>Reports</h2><div class="sub">Your hours summary</div></div></div>
+    <div class="section-head"><div><h2>Reports</h2><div class="sub">${u.role==='admin'?'Staff hours':'Your hours'}</div></div></div>
+    ${u.role === 'admin' ? `
+    <div class="tab-row" style="padding:0 14px 6px;">
+      <div class="tab-pill ${state.reportViewMode==='own'?'active':''}" onclick="setReportViewMode('own')">My Hours</div>
+      <div class="tab-pill ${state.reportViewMode!=='own'?'active':''}" onclick="setReportViewMode('staff')">Staff Hours</div>
+    </div>` : ''}
+    ${(u.role !== 'admin' || state.reportViewMode === 'own') ? `
     <div class="tab-row">
       <div class="tab-pill ${tab==='week'?'active':''}" onclick="setReportTab('week')">This Week</div>
       <div class="tab-pill ${tab==='month'?'active':''}" onclick="setReportTab('month')">Month</div>
       <div class="tab-pill ${tab==='year'?'active':''}" onclick="setReportTab('year')">Year</div>
     </div>
     ${tab === 'week' ? weekReport() : tab === 'month' ? monthReport() : yearReport()}
+    ` : renderAdminReportsInline()}
     <div style="height:20px;"></div>`;
 }
 
 // ── ADMIN REPORTS ──
+function renderAdminReportsInline() { return renderAdminReports(); }
 function renderAdminReports() {
   const now = new Date();
   const m = state.adminReportMonth, y = state.adminReportYear;
@@ -1352,10 +1359,14 @@ function renderAdminReports() {
     <div class="page-pad">
       <div class="card card-sm mb-4" style="background:var(--bg2);">
         <div class="flex-between" style="margin-bottom:8px;">
-          <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;">Staff</span>
+          <div>
+            <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;">Staff</span>
+            <span id="admin-sel-count" style="font-size:10px;color:var(--text3);margin-left:6px;">${getAdminSelected().length} selected</span>
+          </div>
           <div style="display:flex;gap:6px;">
             <button class="btn btn-secondary btn-sm" onclick="selectAllAdminUsers(true)">All</button>
             <button class="btn btn-secondary btn-sm" onclick="selectAllAdminUsers(false)">None</button>
+            <button class="btn btn-primary btn-sm" onclick="applyAdminReport()">Apply</button>
           </div>
         </div>
         ${checkboxes}
@@ -1506,6 +1517,80 @@ function renderBackup() {
           ⚠ Restore from File
         </button>
       </div>
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ═══════════════════════════════════
+// CONFIG HUB (Admin only)
+// ═══════════════════════════════════
+function renderConfig() {
+  const saved = JSON.parse(localStorage.getItem('ts_firebase') || '{}');
+  const isConnected = !DEMO_MODE && !!db;
+  const lastBackup = state.lastBackupDate
+    ? new Date(state.lastBackupDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+    : 'Never';
+
+  return `
+    <div class="section-head">
+      <div><h2>Config</h2><div class="sub">Admin settings</div></div>
+    </div>
+    <div class="page-pad">
+
+      <div class="fw-700 text-xs text-muted mb-4" style="text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Staff</div>
+      <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('users')">
+        <div class="flex-between">
+          <div class="flex-row">
+            ${icons.users}
+            <div>
+              <div class="fw-700 text-sm">Users</div>
+              <div class="text-xs text-muted">${state.users.filter(u=>u.active).length} active staff</div>
+            </div>
+          </div>
+          ${icons.chevronRight}
+        </div>
+      </div>
+
+      <div class="fw-700 text-xs text-muted mb-4" style="text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 8px;">Data</div>
+      <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('backup')">
+        <div class="flex-between">
+          <div class="flex-row">
+            ${icons.backup}
+            <div>
+              <div class="fw-700 text-sm">Backup &amp; Restore</div>
+              <div class="text-xs text-muted">Last backup: ${lastBackup}</div>
+            </div>
+          </div>
+          ${icons.chevronRight}
+        </div>
+      </div>
+      <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('audit')">
+        <div class="flex-between">
+          <div class="flex-row">
+            ${icons.audit}
+            <div>
+              <div class="fw-700 text-sm">Audit Trail</div>
+              <div class="text-xs text-muted">${state.auditLog.length} entries</div>
+            </div>
+          </div>
+          ${icons.chevronRight}
+        </div>
+      </div>
+
+      <div class="fw-700 text-xs text-muted mb-4" style="text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 8px;">Database</div>
+      <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('settings')">
+        <div class="flex-between">
+          <div class="flex-row">
+            ${icons.key}
+            <div>
+              <div class="fw-700 text-sm">Firebase Connection</div>
+              <div class="text-xs text-muted">${isConnected ? '✓ Connected · ' + (saved.projectId||'') : '⚠ Not configured'}</div>
+            </div>
+          </div>
+          ${icons.chevronRight}
+        </div>
+      </div>
+
     </div>
     <div style="height:20px;"></div>`;
 }
@@ -1827,21 +1912,48 @@ window.setEntriesMonth = (m, y) => {
 };
 
 window.setReportTab = (tab) => { state.reportTab = tab; render(); };
+window.setReportViewMode = (mode) => { state.reportViewMode = mode; render(); };
 window.setReportMonth = (m, y) => { state.reportMonth = m; state.reportYear = y; render(); };
 window.setReportYear = (y) => { state.reportYear = y; render(); };
 window.setAdminMonth = (m, y) => { state.adminReportMonth = m; state.adminReportYear = y; render(); };
 window.setAdminReportYear2 = (y) => { state.adminReportYear = y; render(); };
 window.setAdminReportTab = (tab) => { state.adminReportTab = tab; render(); };
 window.toggleAdminUser = (uid, checked) => {
+  // Update state but DON'T re-render — avoids destroying checkbox DOM
   if (checked) {
     if (!state.adminSelectedUsers.includes(uid)) state.adminSelectedUsers.push(uid);
   } else {
     state.adminSelectedUsers = state.adminSelectedUsers.filter(id => id !== uid);
   }
-  render();
+  // Update count badge only
+  const badge = document.getElementById('admin-sel-count');
+  if (badge) badge.textContent = getAdminSelected().length + ' selected';
 };
 window.selectAllAdminUsers = (all) => {
-  state.adminSelectedUsers = all ? state.users.filter(u => u.active).map(u => u.id) : [];
+  const allUsers = state.users.filter(u => u.active);
+  state.adminSelectedUsers = all ? allUsers.map(u => u.id) : [];
+  // Sync checkboxes without full render
+  allUsers.forEach(u => {
+    const cb = document.querySelector(`input[value="${u.id}"]`);
+    if (cb) cb.checked = all;
+  });
+  const badge = document.getElementById('admin-sel-count');
+  if (badge) badge.textContent = getAdminSelected().length + ' selected';
+};
+function getAdminSelected() {
+  const allActive = state.users.filter(u => u.active);
+  return state.adminSelectedUsers.length > 0
+    ? allActive.filter(u => state.adminSelectedUsers.includes(u.id))
+    : allActive;
+}
+window.applyAdminReport = () => {
+  // Read current checkbox states from DOM before rendering
+  const allUsers = state.users.filter(u => u.active);
+  const checked = allUsers.filter(u => {
+    const cb = document.querySelector(`input[value="${u.id}"]`);
+    return cb ? cb.checked : state.adminSelectedUsers.includes(u.id);
+  }).map(u => u.id);
+  state.adminSelectedUsers = checked;
   render();
 };
 
@@ -2183,10 +2295,11 @@ function render() {
     case 'entries': screenContent = renderEntries(); break;
     case 'reports': screenContent = renderReports(); break;
     case 'users': screenContent = renderUsers(); break;
-    case 'admin-reports': screenContent = renderAdminReports(); break;
+    // admin-reports merged into reports screen
     case 'settings': screenContent = renderSettings(); break;
     case 'audit': screenContent = renderAudit(); break;
     case 'backup': screenContent = renderBackup(); break;
+    case 'config': screenContent = renderConfig(); break;
     default: screenContent = renderHome();
   }
 
