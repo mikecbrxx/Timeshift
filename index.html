@@ -479,33 +479,14 @@
     </svg>
     <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;margin-top:16px;">TimeShift</div>
     <div id="boot-status" style="font-family:sans-serif;font-size:12px;color:rgba(255,255,255,0.55);margin-top:8px;">Loading…</div>
-    <div id="boot-debug" style="font-family:monospace;font-size:13px;color:#FFD700;margin-top:16px;text-align:center;padding:0 20px;font-weight:bold;"></div>
   </div>
   <script>
-    // Runs immediately — before module script — to show localStorage state
+    // Migrate old sl_firebase key to ts_firebase if present
     (function() {
-      const dbg = document.getElementById('boot-debug');
-      const status = document.getElementById('boot-status');
-      const cfg = localStorage.getItem('ts_firebase');
-      const oldCfg = localStorage.getItem('sl_firebase'); // check for old key
-      if (cfg) {
-        try {
-          const parsed = JSON.parse(cfg);
-          dbg.textContent = 'Firebase config: ' + (parsed.projectId || 'found');
-          status.textContent = 'Connecting to Firebase…';
-          // Migrate old key if present
-        } catch(e) {
-          dbg.textContent = 'Config parse error: ' + e.message;
-        }
-      } else if (oldCfg) {
-        // Migrate old sl_firebase key to ts_firebase
+      const oldCfg = localStorage.getItem('sl_firebase');
+      if (oldCfg) {
         localStorage.setItem('ts_firebase', oldCfg);
         localStorage.removeItem('sl_firebase');
-        dbg.textContent = 'Migrated config from old key';
-        status.textContent = 'Connecting to Firebase…';
-      } else {
-        dbg.textContent = 'No Firebase config — demo mode';
-        status.textContent = 'Starting demo…';
       }
     })();
   </script>
@@ -519,7 +500,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '3.2';
+const APP_VERSION = '3.3';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Hardcoded credentials — safe to include (public anon keys only)
@@ -1673,17 +1654,6 @@ function renderConfig() {
       </div>
 
       <div class="fw-700 text-xs text-muted mb-4" style="text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 8px;">Database</div>
-      <div class="card card-sm mb-4" style="background:#1a0f3e;border-color:#5E3FA3;">
-        <div style="font-family:monospace;font-size:11px;color:#a0ffa0;line-height:1.8;">
-          <div>Version: v${APP_VERSION}</div>
-          <div>DEMO_MODE: ${DEMO_MODE}</div>
-          <div>db: ${db ? 'connected' : 'null'}</div>
-          <div>ts_firebase key: ${localStorage.getItem('ts_firebase') ? 'present ✓' : 'MISSING ✗'}</div>
-          <div>sl_firebase key: ${localStorage.getItem('sl_firebase') ? 'present (old)' : 'not found'}</div>
-          ${state.firebaseError ? `<div style="color:#ff6b6b;">Error: ${state.firebaseError}</div>` : ''}
-          <div>Users loaded: ${state.users.length}</div>
-        </div>
-      </div>
       <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('settings')">
         <div class="flex-between">
           <div class="flex-row">

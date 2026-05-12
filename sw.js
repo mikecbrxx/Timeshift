@@ -1,7 +1,7 @@
 // TimeShift — Online-only service worker
 // Changing CACHE_NAME with each version forces browsers to pick up the new app immediately.
 
-const CACHE_NAME = 'timeshift-v3.2';
+const CACHE_NAME = 'timeshift-v3.3';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
