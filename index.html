@@ -1,0 +1,1810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="theme-color" content="#FF6B8A"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="ShiftLog"/>
+<title>ShiftLog</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="./apple-touch-icon.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root {
+    --coral: #FF6B8A;
+    --coral-light: #FF8FA3;
+    --coral-dark: #E84D6F;
+    --violet: #7C5CBF;
+    --violet-light: #9B7FD4;
+    --violet-dark: #5E3FA3;
+    --teal: #00B4C5;
+    --teal-light: #33C9D8;
+    --amber: #FFB347;
+    --green: #52C97E;
+    --bg: #FBF7FF;
+    --bg2: #F3EEF9;
+    --card: #FFFFFF;
+    --text: #2D2040;
+    --text2: #6B5B8A;
+    --text3: #A89BC2;
+    --border: #E8DFF5;
+    --shadow: 0 4px 24px rgba(124,92,191,0.10);
+    --shadow-lg: 0 8px 40px rgba(124,92,191,0.16);
+    --radius: 18px;
+    --radius-sm: 10px;
+    --font-head: 'Sora', sans-serif;
+    --font-body: 'Nunito', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  #app { height: 100%; display: flex; flex-direction: column; }
+
+  /* ── SCROLLABLE CONTENT ── */
+  .screen { flex: 1; overflow-y: auto; padding: 0 0 90px; }
+  .screen::-webkit-scrollbar { width: 4px; }
+  .screen::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: white;
+    border-bottom: 1.5px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 12px rgba(124,92,191,0.07);
+  }
+  .topbar-logo { display: flex; align-items: center; gap: 10px; }
+  .topbar-logo svg { width: 34px; height: 34px; }
+  .topbar-title { font-family: var(--font-head); font-weight: 700; font-size: 20px; color: var(--violet-dark); }
+  .topbar-sub { font-size: 11px; color: var(--text3); font-weight: 500; }
+  .topbar-user { display: flex; align-items: center; gap: 8px; }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--coral), var(--violet));
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 13px;
+    font-family: var(--font-head);
+    cursor: pointer; flex-shrink: 0;
+  }
+
+  /* ── OFFLINE BANNER ── */
+  .offline-banner {
+    background: #2D2040; color: white;
+    text-align: center; padding: 8px 16px;
+    font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    flex-shrink: 0; z-index: 50;
+    animation: fadeIn 0.3s ease;
+  }
+  .offline-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* ── OFFLINE BLOCKER ── */
+  .offline-screen {
+    position: fixed; inset: 0;
+    background: linear-gradient(160deg, var(--violet-dark) 0%, #3A1F7A 40%, #1A0F3E 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 250; padding: 40px 30px; text-align: center;
+  }
+  .offline-screen h2 { font-family: var(--font-head); font-weight: 800; font-size: 24px; color: white; margin: 20px 0 10px; }
+  .offline-screen p { color: rgba(255,255,255,0.65); font-size: 14px; margin-bottom: 28px; }
+
+  /* ── TRAFFIC LIGHT ── */
+  .traffic-light {
+    display: flex; align-items: center; gap: 6px;
+    margin-left: 4px;
+  }
+  .tl-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    transition: background 0.4s, box-shadow 0.4s;
+    flex-shrink: 0;
+  }
+  .tl-dot.online  { background: #52C97E; box-shadow: 0 0 6px #52C97E; }
+  .tl-dot.offline { background: #FF4D4D; box-shadow: 0 0 6px #FF4D4D; }
+  .tl-dot.checking { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+  /* ── TOPBAR ACTIONS ── */
+  .topbar-actions { display: flex; align-items: center; gap: 6px; }
+  .topbar-btn {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: var(--bg2); border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text2); flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+  }
+  .topbar-btn:hover { background: var(--border); color: var(--text); }
+  .topbar-btn svg { width: 16px; height: 16px; }
+  .topbar-btn.back { color: var(--violet); }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    background: white;
+    border-top: 1.5px solid var(--border);
+    display: flex;
+    padding: 0;
+    flex-shrink: 0;
+    box-shadow: 0 -2px 16px rgba(124,92,191,0.08);
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 10px 4px 8px;
+    cursor: pointer; border: none; background: none;
+    color: var(--text3); transition: color 0.2s;
+    font-family: var(--font-body);
+    position: relative;
+  }
+  .nav-btn.active { color: var(--coral); }
+  .nav-btn svg { width: 22px; height: 22px; margin-bottom: 3px; }
+  .nav-btn span { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
+  .nav-btn.active::after {
+    content: '';
+    position: absolute; top: 0; left: 20%; right: 20%;
+    height: 3px; background: var(--coral); border-radius: 0 0 4px 4px;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); border: 1.5px solid var(--border);
+    padding: 18px;
+  }
+  .card-sm { padding: 14px 16px; border-radius: var(--radius-sm); }
+
+  /* ── SECTION HEADER ── */
+  .section-head {
+    padding: 20px 20px 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .section-head h2 {
+    font-family: var(--font-head); font-weight: 700; font-size: 18px; color: var(--text);
+  }
+  .section-head .sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  /* ── STAT CARDS ── */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 20px; }
+  .stat-card {
+    border-radius: var(--radius); padding: 16px;
+    position: relative; overflow: hidden;
+  }
+  .stat-card .label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 6px; }
+  .stat-card .value { font-family: var(--font-head); font-weight: 800; font-size: 22px; line-height: 1; }
+  .stat-card .sub-val { font-size: 11px; margin-top: 4px; opacity: 0.7; }
+  .stat-card .blob {
+    position: absolute; right: -10px; bottom: -10px;
+    width: 60px; height: 60px; border-radius: 50%;
+    opacity: 0.15;
+  }
+  .stat-coral { background: linear-gradient(135deg, #FF6B8A, #FF8FA3); color: white; }
+  .stat-violet { background: linear-gradient(135deg, #7C5CBF, #9B7FD4); color: white; }
+  .stat-teal { background: linear-gradient(135deg, #00B4C5, #33C9D8); color: white; }
+  .stat-amber { background: linear-gradient(135deg, #FFB347, #FFC97A); color: white; }
+  .stat-green { background: linear-gradient(135deg, #52C97E, #7DDEA0); color: white; }
+
+  /* ── TODAY HERO ── */
+  .today-hero {
+    margin: 20px 20px 0;
+    background: linear-gradient(135deg, var(--violet-dark) 0%, var(--coral) 100%);
+    border-radius: var(--radius);
+    padding: 22px 20px;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .today-hero::before {
+    content: '';
+    position: absolute; top: -30px; right: -20px;
+    width: 120px; height: 120px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 50%;
+  }
+  .today-hero::after {
+    content: '';
+    position: absolute; bottom: -40px; left: 30px;
+    width: 90px; height: 90px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 50%;
+  }
+  .today-hero .date-label { font-size: 12px; font-weight: 600; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+  .today-hero .hours-big { font-family: var(--font-head); font-weight: 800; font-size: 48px; line-height: 1; margin: 6px 0 4px; }
+  .today-hero .shifts-label { font-size: 12px; opacity: 0.75; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 11px 20px; border-radius: 50px; border: none; cursor: pointer;
+    font-family: var(--font-body); font-weight: 700; font-size: 14px;
+    transition: all 0.18s; text-decoration: none;
+  }
+  .btn-primary { background: linear-gradient(135deg, var(--coral), var(--coral-dark)); color: white; box-shadow: 0 4px 16px rgba(255,107,138,0.35); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255,107,138,0.45); }
+  .btn-secondary { background: var(--bg2); color: var(--violet-dark); border: 1.5px solid var(--border); }
+  .btn-violet { background: linear-gradient(135deg, var(--violet), var(--violet-dark)); color: white; box-shadow: 0 4px 16px rgba(124,92,191,0.30); }
+  .btn-teal { background: linear-gradient(135deg, var(--teal), #0099A8); color: white; }
+  .btn-danger { background: #FFE8EE; color: #D63360; border: 1.5px solid #FFCCD8; }
+  .btn-sm { padding: 7px 14px; font-size: 12px; }
+  .btn-icon { padding: 9px; border-radius: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-full { width: 100%; }
+
+  /* ── FORMS ── */
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .form-group input, .form-group select {
+    width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border); background: var(--bg);
+    font-family: var(--font-body); font-size: 15px; color: var(--text);
+    outline: none; transition: border-color 0.18s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--violet-light); background: white; }
+  .form-group .hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(44,32,64,0.45);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: flex-end; justify-content: center;
+    z-index: 100;
+    animation: fadeIn 0.18s ease;
+  }
+  .modal {
+    background: white; width: 100%; max-width: 480px;
+    border-radius: 24px 24px 0 0;
+    padding: 24px 20px 32px;
+    animation: slideUp 0.22s ease;
+    max-height: 92vh; overflow-y: auto;
+  }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .modal-title { font-family: var(--font-head); font-weight: 700; font-size: 18px; color: var(--text); }
+  .modal-close { width: 32px; height: 32px; border-radius: 50%; background: var(--bg2); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 18px; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* ── PIN SCREEN ── */
+  .pin-screen {
+    position: fixed; inset: 0;
+    background: linear-gradient(160deg, var(--violet-dark) 0%, #3A1F7A 40%, #1A0F3E 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 200; padding: 40px 30px;
+  }
+  .pin-logo { margin-bottom: 32px; }
+  .pin-title { font-family: var(--font-head); font-weight: 800; font-size: 28px; color: white; margin-bottom: 6px; text-align: center; }
+  .pin-subtitle { font-size: 14px; color: rgba(255,255,255,0.6); margin-bottom: 36px; text-align: center; }
+  .pin-dots { display: flex; gap: 14px; margin-bottom: 36px; }
+  .pin-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2.5px solid rgba(255,255,255,0.4);
+    transition: all 0.15s;
+  }
+  .pin-dot.filled { background: var(--coral); border-color: var(--coral); transform: scale(1.1); }
+  .pin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; width: 100%; max-width: 280px; }
+  .pin-key {
+    height: 64px; border-radius: 16px;
+    background: rgba(255,255,255,0.10);
+    border: 1.5px solid rgba(255,255,255,0.15);
+    color: white; font-family: var(--font-head); font-weight: 700; font-size: 22px;
+    cursor: pointer; transition: all 0.12s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pin-key:active { transform: scale(0.94); background: rgba(255,255,255,0.22); }
+  .pin-key.del { font-size: 16px; color: rgba(255,255,255,0.7); }
+  .pin-key.empty { background: transparent; border-color: transparent; cursor: default; }
+  .pin-error { color: var(--coral-light); font-size: 13px; margin-bottom: 12px; text-align: center; min-height: 20px; }
+  .pin-switch { color: rgba(255,255,255,0.55); font-size: 13px; margin-top: 20px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ── SHIFT ENTRY ── */
+  .shift-row {
+    background: var(--bg); border-radius: var(--radius-sm);
+    padding: 12px 14px; margin-bottom: 10px;
+    border: 1.5px solid var(--border);
+  }
+  .shift-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .shift-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .badge-1 { background: #FFE8EE; color: #D63360; }
+  .badge-2 { background: #EDE6FF; color: #5E3FA3; }
+  .badge-3 { background: #E0F7FA; color: #006064; }
+  .shift-duration { font-family: var(--font-head); font-weight: 700; font-size: 15px; color: var(--violet); }
+
+  /* ── ENTRY LIST ── */
+  .entry-item {
+    padding: 14px 16px; border-radius: var(--radius-sm);
+    background: white; border: 1.5px solid var(--border);
+    margin-bottom: 10px; cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .entry-item:hover { box-shadow: var(--shadow); border-color: var(--violet-light); }
+  .entry-item-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .entry-date { font-weight: 700; font-size: 14px; color: var(--text); }
+  .entry-total { font-family: var(--font-head); font-weight: 800; font-size: 16px; color: var(--coral); }
+  .entry-shifts { font-size: 12px; color: var(--text3); }
+  .entry-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+  /* ── REPORT ── */
+  .report-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 20px 16px; }
+  .report-cell { background: var(--bg2); border-radius: var(--radius-sm); padding: 12px 10px; text-align: center; }
+  .report-cell .rc-label { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+  .report-cell .rc-val { font-family: var(--font-head); font-weight: 800; font-size: 17px; color: var(--violet-dark); }
+
+  /* ── USERS ── */
+  .user-card {
+    background: white; border-radius: var(--radius); border: 1.5px solid var(--border);
+    box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px;
+    overflow: hidden; position: relative;
+  }
+  .user-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .user-card-avatar {
+    width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-head); font-weight: 800; font-size: 17px; color: white;
+  }
+  .user-card-name { font-weight: 700; font-size: 15px; color: var(--text); }
+  .user-card-role { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; display: inline-block; margin-top: 2px; }
+  .role-admin { background: #EDE6FF; color: var(--violet-dark); }
+  .role-user { background: #FFE8EE; color: var(--coral-dark); }
+  .user-card-info { font-size: 12px; color: var(--text2); line-height: 1.8; }
+  .user-card-info span { display: flex; align-items: center; gap: 5px; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: white; padding: 10px 20px;
+    border-radius: 50px; font-size: 13px; font-weight: 600;
+    z-index: 300; animation: fadeIn 0.2s ease;
+    white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  }
+
+  /* ── TABS ── */
+  .tab-row { display: flex; gap: 8px; padding: 0 20px 16px; overflow-x: auto; }
+  .tab-row::-webkit-scrollbar { display: none; }
+  .tab-pill {
+    padding: 7px 16px; border-radius: 50px; font-size: 13px; font-weight: 700;
+    border: 1.5px solid var(--border); background: white; color: var(--text2);
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
+  }
+  .tab-pill.active { background: var(--violet); color: white; border-color: var(--violet); }
+
+  /* ── DIVIDER ── */
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  /* ── EMPTY ── */
+  .empty { text-align: center; padding: 48px 20px; color: var(--text3); }
+  .empty svg { width: 56px; height: 56px; margin-bottom: 14px; opacity: 0.4; }
+  .empty p { font-size: 14px; }
+
+  /* ── CHIP ── */
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .chip-green { background: #E6F9EF; color: #1A7A42; }
+  .chip-red { background: #FFE8EE; color: #D63360; }
+  .chip-amber { background: #FFF4E5; color: #A05A00; }
+
+  /* ── MISC ── */
+  .page-pad { padding: 0 20px; }
+  .mt-4 { margin-top: 16px; }
+  .mb-4 { margin-bottom: 16px; }
+  .flex-row { display: flex; align-items: center; gap: 10px; }
+  .flex-between { display: flex; align-items: center; justify-content: space-between; }
+  .text-sm { font-size: 13px; }
+  .text-xs { font-size: 11px; }
+  .text-muted { color: var(--text3); }
+  .text-violet { color: var(--violet); }
+  .text-coral { color: var(--coral); }
+  .fw-700 { font-weight: 700; }
+  .fw-800 { font-weight: 800; font-family: var(--font-head); }
+  .hidden { display: none !important; }
+  select option { font-family: var(--font-body); }
+
+  /* ── PROFILE MENU ── */
+  .profile-menu {
+    position: fixed; top: 60px; right: 16px;
+    background: white; border-radius: 16px; border: 1.5px solid var(--border);
+    box-shadow: var(--shadow-lg); z-index: 150; min-width: 180px;
+    overflow: hidden; animation: fadeIn 0.15s ease;
+  }
+  .profile-menu-item {
+    padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+    cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text);
+    transition: background 0.12s;
+  }
+  .profile-menu-item:hover { background: var(--bg2); }
+  .profile-menu-item.danger { color: #D63360; }
+  .profile-menu-item svg { width: 18px; height: 18px; color: var(--text3); }
+  .profile-menu-item.danger svg { color: #D63360; }
+
+  /* ── CHANGE PIN MODAL ── */
+  .pin-input-row { display: flex; gap: 10px; justify-content: center; margin: 12px 0; }
+  .pin-digit {
+    width: 52px; height: 60px; border-radius: 12px;
+    border: 2px solid var(--border); background: var(--bg);
+    font-family: var(--font-head); font-weight: 700; font-size: 24px;
+    text-align: center; color: var(--text); outline: none;
+    transition: border-color 0.15s;
+  }
+  .pin-digit:focus { border-color: var(--violet-light); background: white; }
+
+  /* Responsive */
+  @media (min-width: 480px) {
+    .modal { border-radius: 24px; margin: auto; margin-bottom: 20px; }
+    .modal-overlay { align-items: center; }
+    .stat-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+// ════════════════════════════════════════════════════════════
+// SHIFTLOG APP — Full Implementation
+// ════════════════════════════════════════════════════════════
+
+// ── SUPABASE CONFIG (replace with real keys) ──────────────
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+// ── DEMO MODE (runs without Supabase) ─────────────────────
+const DEMO_MODE = true;
+
+// ═══════════════════════════════════
+// STATE
+// ═══════════════════════════════════
+let state = {
+  screen: 'pin',        // pin | home | log | entries | reports | users | profile | admin-reports
+  online: null,         // null=checking, true=online, false=offline
+  currentUser: null,
+  users: [],
+  entries: [],          // {id, user_id, date, shifts:[{start,end}], total_mins, note}
+  pinInput: '',
+  pinError: '',
+  pinMode: 'login',     // login | change-old | change-new | change-confirm | admin-reset
+  pinChangeStep: 0,
+  pinChangeTarget: null,
+  pinBuffer: ['','','',''],
+  modal: null,          // null | 'add-entry' | 'edit-entry' | 'add-user' | 'edit-user' | 'change-pin' | 'view-entry'
+  modalData: {},
+  toast: null,
+  profileMenu: false,
+  reportTab: 'month',   // month | week | year
+  reportMonth: new Date().getMonth(),
+  reportYear: new Date().getFullYear(),
+  entriesMonth: new Date().getMonth(),
+  entriesYear: new Date().getFullYear(),
+  adminReportUser: 'all',
+  adminReportMonth: new Date().getMonth(),
+  adminReportYear: new Date().getFullYear(),
+};
+
+// ═══════════════════════════════════
+// DEMO DATA
+// ═══════════════════════════════════
+function initDemoData() {
+  state.users = [
+    {
+      id: 'u1', name: 'Admin User', pin: '0000', role: 'admin',
+      initials: 'AU', color: '#7C5CBF',
+      phone: '07700 900001', email: 'admin@shiftlog.app',
+      address: '1 High Street', city: 'London', postcode: 'EC1A 1BB',
+      hourly_rate: null, active: true
+    },
+    {
+      id: 'u2', name: 'Sarah Johnson', pin: '1234', role: 'user',
+      initials: 'SJ', color: '#FF6B8A',
+      phone: '07700 900002', email: 'sarah@example.com',
+      address: '24 Rose Lane', city: 'Manchester', postcode: 'M1 2AB',
+      hourly_rate: null, active: true
+    },
+    {
+      id: 'u3', name: 'Emma Clarke', pin: '5678', role: 'user',
+      initials: 'EC', color: '#00B4C5',
+      phone: '07700 900003', email: 'emma@example.com',
+      address: '8 Oak Avenue', city: 'Birmingham', postcode: 'B1 1AA',
+      hourly_rate: null, active: true
+    }
+  ];
+
+  // Generate sample entries for last 3 months
+  const today = new Date();
+  const entries = [];
+  let id = 1;
+
+  ['u2','u3'].forEach(uid => {
+    for (let d = 0; d < 60; d++) {
+      if (Math.random() > 0.35) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - d);
+        const dateStr = formatDate(date);
+
+        const numShifts = Math.random() > 0.7 ? 2 : 1;
+        const shifts = [];
+        let startH = 7 + Math.floor(Math.random() * 3);
+        for (let s = 0; s < numShifts; s++) {
+          const dur = 3 + Math.floor(Math.random() * 5);
+          const endH = startH + dur;
+          shifts.push({ start: `${String(startH).padStart(2,'0')}:00`, end: `${String(endH % 24).padStart(2,'0')}:00` });
+          startH = endH + 1;
+        }
+        const totalMins = shifts.reduce((acc, sh) => {
+          return acc + roundShift(parseTime(sh.start), parseTime(sh.end));
+        }, 0);
+
+        entries.push({ id: String(id++), user_id: uid, date: dateStr, shifts, total_mins: totalMins, note: '' });
+      }
+    }
+  });
+
+  state.entries = entries;
+}
+
+// ═══════════════════════════════════
+// TIME HELPERS
+// ═══════════════════════════════════
+function parseTime(str) { // "HH:MM" -> minutes from midnight
+  const [h, m] = str.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function formatMins(mins) { // 90 -> "1h 30m"
+  if (mins <= 0) return '0h 0m';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function roundShift(startMins, endMins) {
+  // Handle overnight
+  if (endMins <= startMins) endMins += 24 * 60;
+  const raw = endMins - startMins;
+  return Math.round(raw / 15) * 15;
+}
+
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function parseDate(str) { // "YYYY-MM-DD"
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function displayDate(str) {
+  const d = parseDate(str);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function displayDateShort(str) {
+  const d = parseDate(str);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function todayStr() { return formatDate(new Date()); }
+
+function getWeekBounds(d = new Date()) {
+  const day = d.getDay(); // 0=Sun
+  const diff = (day === 0 ? -6 : 1) - day; // Monday
+  const mon = new Date(d); mon.setDate(d.getDate() + diff); mon.setHours(0,0,0,0);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+  return { start: mon, end: sun };
+}
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ═══════════════════════════════════
+// DATA ACCESS
+// ═══════════════════════════════════
+function userEntries(userId, entries) {
+  return (entries || state.entries).filter(e => e.user_id === userId);
+}
+
+function entriesForPeriod(userId, filter) {
+  const ue = userEntries(userId);
+  return ue.filter(e => {
+    const d = parseDate(e.date);
+    if (filter.date) return e.date === filter.date;
+    if (filter.month !== undefined) return d.getMonth() === filter.month && d.getFullYear() === filter.year;
+    if (filter.year) return d.getFullYear() === filter.year;
+    if (filter.weekStart) return d >= filter.weekStart && d <= filter.weekEnd;
+    return true;
+  });
+}
+
+function sumMins(entries) {
+  return entries.reduce((a, e) => a + e.total_mins, 0);
+}
+
+function dashboardStats(userId) {
+  const today = todayStr();
+  const now = new Date();
+
+  const todayEntries = entriesForPeriod(userId, { date: today });
+  const todayMins = sumMins(todayEntries);
+
+  // Last worked day
+  const sorted = userEntries(userId).sort((a,b) => b.date.localeCompare(a.date));
+  const lastEntry = sorted.find(e => e.date < today) || sorted[0];
+
+  const week = getWeekBounds(now);
+  const weekMins = sumMins(entriesForPeriod(userId, { weekStart: week.start, weekEnd: week.end }));
+
+  const monthMins = sumMins(entriesForPeriod(userId, { month: now.getMonth(), year: now.getFullYear() }));
+  const yearMins = sumMins(entriesForPeriod(userId, { year: now.getFullYear() }));
+
+  return { todayMins, lastEntry, weekMins, monthMins, yearMins };
+}
+
+// ═══════════════════════════════════
+// AUTH
+// ═══════════════════════════════════
+function tryLogin(pin) {
+  const user = state.users.find(u => u.pin === pin && u.active);
+  if (user) {
+    state.currentUser = user;
+    state.screen = 'home';
+    state.pinInput = '';
+    state.pinError = '';
+    render();
+  } else {
+    state.pinError = 'Incorrect PIN. Please try again.';
+    state.pinInput = '';
+    render();
+  }
+}
+
+function logout() {
+  state.currentUser = null;
+  state.screen = 'pin';
+  state.pinInput = '';
+  state.pinError = '';
+  state.profileMenu = false;
+  render();
+}
+
+// ═══════════════════════════════════
+// LOGO SVG
+// ═══════════════════════════════════
+function logoSVG(size = 40) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="40" height="40" rx="12" fill="url(#lg1)"/>
+    <circle cx="20" cy="20" r="11" stroke="white" stroke-width="2.5" fill="none" opacity="0.9"/>
+    <line x1="20" y1="9" x2="20" y2="20" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="20" y1="20" x2="26" y2="25" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="20" cy="20" r="2" fill="white"/>
+    <defs>
+      <linearGradient id="lg1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#7C5CBF"/>
+        <stop offset="100%" stop-color="#FF6B8A"/>
+      </linearGradient>
+    </defs>
+  </svg>`;
+}
+
+// ═══════════════════════════════════
+// ICONS
+// ═══════════════════════════════════
+const icons = {
+  home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+  chart: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+  users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  x: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+  logout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  phone: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.68 13.6 19.79 19.79 0 0 1 1.61 5a2 2 0 0 1 1.99-2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.09a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17v-.08z"/></svg>`,
+  mail: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
+  map: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  key: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+  clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+  chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>`,
+  refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
+  exit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+};
+
+// ═══════════════════════════════════
+// RENDER HELPERS
+// ═══════════════════════════════════
+function navBtn(id, icon, label) {
+  const active = state.screen === id ? 'active' : '';
+  return `<button class="nav-btn ${active}" onclick="nav('${id}')">${icons[icon]}<span>${label}</span></button>`;
+}
+
+function renderNav() {
+  const u = state.currentUser;
+  if (!u) return '';
+  const adminExtra = u.role === 'admin'
+    ? navBtn('users', 'users', 'Users') + navBtn('admin-reports', 'eye', 'Admin')
+    : '';
+  return `<div class="bottom-nav">
+    ${navBtn('home','home','Home')}
+    ${navBtn('log','plus','Log')}
+    ${navBtn('entries','list','Entries')}
+    ${navBtn('reports','chart','Reports')}
+    ${adminExtra}
+  </div>`;
+}
+
+function renderTopbar() {
+  const u = state.currentUser;
+  if (!u) return '';
+  const tlClass = state.online === true ? 'online' : state.online === false ? 'offline' : 'checking';
+  const showBack = state.screen !== 'home';
+  return `<div class="topbar">
+    <div class="topbar-logo">
+      ${showBack ? `<div class="topbar-btn back" onclick="nav('home')" title="Back to Home">${icons.chevronLeft}</div>` : ''}
+      ${logoSVG(34)}
+      <div>
+        <div class="topbar-title">ShiftLog</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="traffic-light" title="${tlClass === 'online' ? 'Online' : tlClass === 'offline' ? 'Offline' : 'Checking…'}">
+        <div class="tl-dot ${tlClass}"></div>
+      </div>
+      <div class="topbar-btn" onclick="refreshApp()" title="Refresh">${icons.refresh}</div>
+      <div class="topbar-btn" onclick="exitApp()" title="Exit">${icons.exit}</div>
+      <div class="topbar-user" style="display:flex;align-items:center;gap:8px;margin-left:2px;">
+        <div class="avatar" onclick="toggleProfileMenu()" style="background:${u.color}">${u.initials}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════
+// SCREENS
+// ═══════════════════════════════════
+
+// ── PIN ──
+function renderPin() {
+  const dots = [0,1,2,3].map(i =>
+    `<div class="pin-dot ${state.pinInput.length > i ? 'filled' : ''}"></div>`
+  ).join('');
+
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','del'];
+  const grid = keys.map(k => {
+    if (k === '') return `<div class="pin-key empty"></div>`;
+    if (k === 'del') return `<div class="pin-key del" onclick="pinKey('del')">⌫</div>`;
+    return `<div class="pin-key" onclick="pinKey('${k}')">${k}</div>`;
+  }).join('');
+
+  const subtitle = state.pinMode === 'login'
+    ? 'Enter your 4-digit PIN to continue'
+    : state.pinMode === 'change-old' ? 'Enter your current PIN'
+    : state.pinMode === 'change-new' ? 'Enter your new PIN'
+    : 'Confirm your new PIN';
+
+  return `<div class="pin-screen">
+    <div class="pin-logo">${logoSVG(64)}</div>
+    <div class="pin-title">ShiftLog</div>
+    <div class="pin-subtitle">${subtitle}</div>
+    <div class="pin-dots">${dots}</div>
+    <div class="pin-error">${state.pinError}</div>
+    <div class="pin-grid">${grid}</div>
+    ${state.pinMode === 'login' ? `<div class="pin-switch" onclick="showDemoInfo()">Demo: Admin=0000 · Staff=1234</div>` : ''}
+  </div>`;
+}
+
+// ── HOME ──
+function renderHome() {
+  const u = state.currentUser;
+  const stats = dashboardStats(u.id);
+  const todayStr2 = todayStr();
+  const todayDisplay = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
+
+  const lastWorkedDisplay = stats.lastEntry
+    ? `${displayDateShort(stats.lastEntry.date)} · ${formatMins(stats.lastEntry.total_mins)}`
+    : '—';
+
+  const todayE = state.entries.filter(e => e.user_id === u.id && e.date === todayStr2);
+  const shiftCount = todayE.reduce((a,e) => a + e.shifts.length, 0);
+
+  return `
+    <div class="today-hero">
+      <div class="date-label">${todayDisplay}</div>
+      <div class="hours-big">${formatMins(stats.todayMins)}</div>
+      <div class="shifts-label">${shiftCount === 0 ? 'No shifts logged today' : `${shiftCount} shift${shiftCount > 1 ? 's' : ''} logged`}</div>
+    </div>
+    <div style="padding:16px 20px 0;">
+      <button class="btn btn-primary btn-full" onclick="nav('log')">
+        ${icons.plus} Log Shift
+      </button>
+    </div>
+    <div class="section-head" style="margin-top:8px;">
+      <h2>Your Overview</h2>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card stat-violet">
+        <div class="label">Last Day</div>
+        <div class="value" style="font-size:16px;">${stats.lastEntry ? displayDateShort(stats.lastEntry.date) : '—'}</div>
+        <div class="sub-val">${stats.lastEntry ? formatMins(stats.lastEntry.total_mins) : 'No entries'}</div>
+        <div class="blob" style="background:white;"></div>
+      </div>
+      <div class="stat-card stat-teal">
+        <div class="label">This Week</div>
+        <div class="value">${formatMins(stats.weekMins)}</div>
+        <div class="sub-val">Mon – Sun</div>
+        <div class="blob" style="background:white;"></div>
+      </div>
+      <div class="stat-card stat-coral">
+        <div class="label">This Month</div>
+        <div class="value">${formatMins(stats.monthMins)}</div>
+        <div class="sub-val">${MONTH_NAMES[new Date().getMonth()]}</div>
+        <div class="blob" style="background:white;"></div>
+      </div>
+      <div class="stat-card stat-amber">
+        <div class="label">This Year</div>
+        <div class="value">${formatMins(stats.yearMins)}</div>
+        <div class="sub-val">${new Date().getFullYear()}</div>
+        <div class="blob" style="background:white;"></div>
+      </div>
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ── LOG SHIFT ──
+function renderLog() {
+  const editData = state.modalData.editEntry || {};
+  const isEdit = !!editData.id;
+  const today = todayStr();
+  const date = editData.date || today;
+  const shifts = editData.shifts || [{ start: '', end: '' }];
+  const note = editData.note || '';
+
+  const shiftRows = shifts.map((sh, i) => {
+    const dur = (sh.start && sh.end) ? roundShift(parseTime(sh.start), parseTime(sh.end)) : 0;
+    const badges = ['badge-1','badge-2','badge-3'];
+    return `<div class="shift-row" id="shift-${i}">
+      <div class="shift-row-head">
+        <span class="shift-badge ${badges[i]}">Shift ${i+1}</span>
+        <span class="shift-duration">${dur > 0 ? formatMins(dur) : '—'}</span>
+        ${i > 0 ? `<button class="btn btn-danger btn-sm btn-icon" onclick="removeShift(${i})">${icons.x}</button>` : ''}
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Start</label>
+          <input type="time" value="${sh.start}" onchange="updateShift(${i},'start',this.value)" oninput="updateShift(${i},'start',this.value)"/>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>End</label>
+          <input type="time" value="${sh.end}" onchange="updateShift(${i},'end',this.value)" oninput="updateShift(${i},'end',this.value)"/>
+          ${sh.end && sh.start && parseTime(sh.end) <= parseTime(sh.start) ? '<div class="hint text-violet">⚡ Ends next day</div>' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const totalMins = shifts.reduce((acc, sh) => {
+    if (!sh.start || !sh.end) return acc;
+    return acc + roundShift(parseTime(sh.start), parseTime(sh.end));
+  }, 0);
+
+  return `
+    <div class="section-head">
+      <div>
+        <h2>${isEdit ? 'Edit Entry' : 'Log Shifts'}</h2>
+        <div class="sub">Enter your shift times for the day</div>
+      </div>
+    </div>
+    <div class="page-pad">
+      <div class="form-group">
+        <label>${icons.calendar} Date</label>
+        <input type="date" value="${date}" max="${today}" id="log-date" onchange="updateLogDate(this.value)"/>
+      </div>
+      ${shiftRows}
+      ${shifts.length < 3 ? `<button class="btn btn-secondary btn-full mb-4" onclick="addShift()">
+        ${icons.plus} Add Another Shift
+      </button>` : ''}
+      ${totalMins > 0 ? `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#F0EBFF,#FFE8EE);border-color:var(--violet-light)">
+        <div class="flex-between">
+          <span style="font-weight:700;color:var(--text2);">Total for day</span>
+          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(totalMins)}</span>
+        </div>
+        <div class="text-xs text-muted mt-1">Rounded to nearest 15 mins per shift</div>
+      </div>` : ''}
+      <div class="form-group">
+        <label>Note (optional)</label>
+        <input type="text" placeholder="e.g. Covered for colleague" value="${note}" id="log-note"/>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="saveEntry()">
+        ${isEdit ? icons.edit + ' Update Entry' : icons.plus + ' Save Entry'}
+      </button>
+      ${isEdit ? `<button class="btn btn-danger btn-full mt-4" onclick="deleteEntry('${editData.id}')">
+        ${icons.trash} Delete Entry
+      </button>` : ''}
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ── ENTRIES ──
+function renderEntries() {
+  const u = state.currentUser;
+  const year = state.entriesYear;
+  const month = state.entriesMonth;
+
+  const monthEntries = state.entries
+    .filter(e => e.user_id === u.id)
+    .filter(e => {
+      const d = parseDate(e.date);
+      return d.getMonth() === month && d.getFullYear() === year;
+    })
+    .sort((a,b) => b.date.localeCompare(a.date));
+
+  const totalMins = sumMins(monthEntries);
+
+  // Month nav
+  const prevMonth = () => {
+    let m = month - 1, y = year;
+    if (m < 0) { m = 11; y--; }
+    return { m, y };
+  };
+  const nextMonth = () => {
+    let m = month + 1, y = year;
+    if (m > 11) { m = 0; y++; }
+    return { m, y };
+  };
+  const next = nextMonth();
+  const prev = prevMonth();
+  const isThisMonthOrFuture = (year > new Date().getFullYear()) ||
+    (year === new Date().getFullYear() && month >= new Date().getMonth());
+
+  const rows = monthEntries.map(e => {
+    const shiftInfo = e.shifts.map((s,i) => `S${i+1}: ${s.start}–${s.end}`).join(' · ');
+    return `<div class="entry-item">
+      <div class="entry-item-top">
+        <div>
+          <div class="entry-date">${displayDate(e.date)}</div>
+          <div class="entry-shifts">${shiftInfo}</div>
+          ${e.note ? `<div class="text-xs text-muted" style="margin-top:3px;">${e.note}</div>` : ''}
+        </div>
+        <div class="entry-total">${formatMins(e.total_mins)}</div>
+      </div>
+      <div class="entry-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editEntry('${e.id}')">${icons.edit} Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteEntry('${e.id}')">${icons.trash} Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="section-head">
+      <div><h2>Entries</h2><div class="sub">All your logged shifts</div></div>
+    </div>
+    <div class="flex-between page-pad mb-4">
+      <button class="btn btn-secondary btn-icon btn-sm" onclick="setEntriesMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
+      <div style="font-weight:700;font-size:15px;">${MONTH_NAMES[month]} ${year}</div>
+      <button class="btn btn-secondary btn-icon btn-sm" ${isThisMonthOrFuture ? 'disabled' : ''} onclick="setEntriesMonth(${next.m},${next.y})">${icons.chevronRight}</button>
+    </div>
+    ${totalMins > 0 ? `<div class="page-pad mb-4">
+      <div class="card card-sm" style="background:linear-gradient(135deg,#F0EBFF,#FFE8EE);border-color:var(--violet-light);">
+        <div class="flex-between">
+          <span class="fw-700 text-muted text-sm">Month Total</span>
+          <span class="fw-800 text-violet" style="font-size:18px;">${formatMins(totalMins)}</span>
+        </div>
+        <div class="text-xs text-muted mt-1">${monthEntries.length} day${monthEntries.length !== 1 ? 's' : ''} worked</div>
+      </div>
+    </div>` : ''}
+    <div class="page-pad">
+      ${rows || `<div class="empty">${icons.clock}<p>No entries for ${MONTH_SHORT[month]} ${year}</p></div>`}
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ── REPORTS ──
+function renderReports() {
+  const u = state.currentUser;
+  const now = new Date();
+
+  // Week report
+  function weekReport() {
+    const week = getWeekBounds(now);
+    const entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d >= week.start && d <= week.end;
+    });
+    const days = entries.sort((a,b) => a.date.localeCompare(b.date));
+    const total = sumMins(entries);
+    return `<div class="page-pad">
+      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">
+        <div class="flex-between">
+          <span class="fw-700" style="color:#00696F;">Week Total</span>
+          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(total)}</span>
+        </div>
+        <div class="text-xs text-muted mt-1">${days.length} days worked · ${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
+      </div>
+      ${days.map(e => `<div class="entry-item" style="cursor:default;">
+        <div class="flex-between">
+          <div>
+            <div class="fw-700 text-sm">${displayDate(e.date)}</div>
+            <div class="text-xs text-muted">${e.shifts.length} shift${e.shifts.length>1?'s':''}</div>
+          </div>
+          <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
+        </div>
+      </div>`).join('') || `<div class="empty">${icons.chart}<p>No entries this week</p></div>`}
+      <button class="btn btn-teal btn-full mt-4" onclick="exportPDF('week')">${icons.download} Export PDF</button>
+    </div>`;
+  }
+
+  // Month report
+  function monthReport() {
+    const m = state.reportMonth, y = state.reportYear;
+    const entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d.getMonth() === m && d.getFullYear() === y;
+    }).sort((a,b) => a.date.localeCompare(b.date));
+    const total = sumMins(entries);
+    const prev = m === 0 ? { m:11, y:y-1 } : { m:m-1, y };
+    const next = m === 11 ? { m:0, y:y+1 } : { m:m+1, y };
+    const isCurrentOrFuture = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
+    return `<div class="page-pad">
+      <div class="flex-between mb-4">
+        <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
+        <span class="fw-700" style="font-size:15px;">${MONTH_NAMES[m]} ${y}</span>
+        <button class="btn btn-secondary btn-icon btn-sm" ${isCurrentOrFuture?'disabled':''} onclick="setReportMonth(${next.m},${next.y})">${icons.chevronRight}</button>
+      </div>
+      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF0F3,#F0EBFF);border-color:var(--coral-light);">
+        <div class="flex-between">
+          <span class="fw-700" style="color:var(--coral-dark);">Month Total</span>
+          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(total)}</span>
+        </div>
+        <div class="text-xs text-muted mt-1">${entries.length} days worked</div>
+      </div>
+      ${entries.map(e => `<div class="entry-item" style="cursor:default;">
+        <div class="flex-between">
+          <div>
+            <div class="fw-700 text-sm">${displayDate(e.date)}</div>
+            <div class="text-xs text-muted">${e.shifts.map((s,i)=>`S${i+1}: ${s.start}–${s.end}`).join(' · ')}</div>
+            ${e.note?`<div class="text-xs text-muted">${e.note}</div>`:''}
+          </div>
+          <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
+        </div>
+      </div>`).join('') || `<div class="empty">${icons.chart}<p>No entries for ${MONTH_SHORT[m]} ${y}</p></div>`}
+      <button class="btn btn-teal btn-full mt-4" onclick="exportPDF('month')">${icons.download} Export PDF</button>
+    </div>`;
+  }
+
+  // Year report
+  function yearReport() {
+    const y = state.reportYear;
+    const entries = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
+    const total = sumMins(entries);
+    const byMonth = Array.from({length:12}, (_,i) => {
+      const me = entries.filter(e => parseDate(e.date).getMonth() === i);
+      return { month: i, mins: sumMins(me), days: me.length };
+    });
+    return `<div class="page-pad">
+      <div class="flex-between mb-4">
+        <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportYear(${y-1})">${icons.chevronLeft}</button>
+        <span class="fw-700" style="font-size:15px;">${y}</span>
+        <button class="btn btn-secondary btn-icon btn-sm" ${y >= now.getFullYear() ? 'disabled' : ''} onclick="setReportYear(${y+1})">${icons.chevronRight}</button>
+      </div>
+      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF4E5,#FFE8EE);border-color:var(--amber);">
+        <div class="flex-between">
+          <span class="fw-700" style="color:#A05A00;">Year Total</span>
+          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(total)}</span>
+        </div>
+        <div class="text-xs text-muted mt-1">${entries.length} days worked in ${y}</div>
+      </div>
+      ${byMonth.filter(m => m.mins > 0).map(m => `<div class="entry-item" style="cursor:default;">
+        <div class="flex-between">
+          <div>
+            <div class="fw-700 text-sm">${MONTH_NAMES[m.month]}</div>
+            <div class="text-xs text-muted">${m.days} day${m.days!==1?'s':''} worked</div>
+          </div>
+          <div class="fw-800 text-coral">${formatMins(m.mins)}</div>
+        </div>
+      </div>`).join('') || `<div class="empty">${icons.chart}<p>No entries for ${y}</p></div>`}
+      <button class="btn btn-teal btn-full mt-4" onclick="exportPDF('year')">${icons.download} Export PDF</button>
+    </div>`;
+  }
+
+  const tab = state.reportTab;
+  return `
+    <div class="section-head"><div><h2>Reports</h2><div class="sub">Your hours summary</div></div></div>
+    <div class="tab-row">
+      <div class="tab-pill ${tab==='week'?'active':''}" onclick="setReportTab('week')">This Week</div>
+      <div class="tab-pill ${tab==='month'?'active':''}" onclick="setReportTab('month')">Month</div>
+      <div class="tab-pill ${tab==='year'?'active':''}" onclick="setReportTab('year')">Year</div>
+    </div>
+    ${tab === 'week' ? weekReport() : tab === 'month' ? monthReport() : yearReport()}
+    <div style="height:20px;"></div>`;
+}
+
+// ── ADMIN REPORTS ──
+function renderAdminReports() {
+  const now = new Date();
+  const m = state.adminReportMonth, y = state.adminReportYear;
+  const targetUid = state.adminReportUser;
+
+  const allUsers = state.users.filter(u => u.active);
+  const filterEntries = (uid) => state.entries.filter(e => {
+    if (uid !== 'all' && e.user_id !== uid) return false;
+    const d = parseDate(e.date);
+    return d.getMonth() === m && d.getFullYear() === y;
+  });
+
+  const userOptions = [`<option value="all">All Users</option>`,
+    ...allUsers.map(u => `<option value="${u.id}" ${targetUid===u.id?'selected':''}>${u.name}</option>`)
+  ].join('');
+
+  const prev = m === 0 ? { m:11, y:y-1 } : { m:m-1, y };
+  const next = m === 11 ? { m:0, y:y+1 } : { m:m+1, y };
+  const isFuture = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
+
+  // Build per-user summary
+  const usersToShow = targetUid === 'all' ? allUsers : allUsers.filter(u => u.id === targetUid);
+  const summaryRows = usersToShow.map(u => {
+    const ue = filterEntries(u.id);
+    const total = sumMins(ue);
+    return `<div class="entry-item" style="cursor:default;">
+      <div class="flex-between">
+        <div class="flex-row">
+          <div class="user-card-avatar" style="width:36px;height:36px;font-size:13px;background:${u.color}">${u.initials}</div>
+          <div>
+            <div class="fw-700 text-sm">${u.name}</div>
+            <div class="text-xs text-muted">${ue.length} day${ue.length!==1?'s':''} worked</div>
+          </div>
+        </div>
+        <div class="fw-800 text-coral">${formatMins(total)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const grandTotal = sumMins(filterEntries(targetUid === 'all' ? undefined : targetUid).filter(e =>
+    targetUid === 'all' || e.user_id === targetUid
+  ));
+  // Recalculate for all
+  const allEntries = targetUid === 'all'
+    ? state.entries.filter(e => { const d=parseDate(e.date); return d.getMonth()===m && d.getFullYear()===y; })
+    : filterEntries(targetUid);
+  const gt = sumMins(allEntries);
+
+  return `
+    <div class="section-head"><div><h2>Admin Reports</h2><div class="sub">Consolidated staff hours</div></div></div>
+    <div class="page-pad">
+      <div class="form-group">
+        <label>User</label>
+        <select onchange="setAdminReportUser(this.value)">${userOptions}</select>
+      </div>
+      <div class="flex-between mb-4">
+        <button class="btn btn-secondary btn-icon btn-sm" onclick="setAdminMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
+        <span class="fw-700" style="font-size:15px;">${MONTH_NAMES[m]} ${y}</span>
+        <button class="btn btn-secondary btn-icon btn-sm" ${isFuture?'disabled':''} onclick="setAdminMonth(${next.m},${next.y})">${icons.chevronRight}</button>
+      </div>
+      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#EDE6FF,#FFE8EE);border-color:var(--violet-light);">
+        <div class="flex-between">
+          <span class="fw-700 text-violet">Total Hours</span>
+          <span class="fw-800" style="font-size:20px;color:var(--coral-dark);">${formatMins(gt)}</span>
+        </div>
+        <div class="text-xs text-muted mt-1">${allEntries.length} entries · ${targetUid === 'all' ? 'All users' : usersToShow[0]?.name}</div>
+      </div>
+      ${summaryRows || `<div class="empty">${icons.users}<p>No entries found</p></div>`}
+      <button class="btn btn-teal btn-full mt-4" onclick="exportAdminPDF()">${icons.download} Export PDF</button>
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ── USERS ──
+function renderUsers() {
+  const users = state.users.filter(u => u.active);
+  const cards = users.map(u => `
+    <div class="user-card">
+      <div class="user-card-top">
+        <div class="user-card-avatar" style="background:${u.color}">${u.initials}</div>
+        <div>
+          <div class="user-card-name">${u.name}</div>
+          <span class="user-card-role ${u.role==='admin'?'role-admin':'role-user'}">${u.role==='admin'?'Admin':'Staff'}</span>
+        </div>
+      </div>
+      <div class="user-card-info">
+        <span>${icons.phone} ${u.phone || '—'}</span>
+        <span>${icons.mail} ${u.email || '—'}</span>
+        <span>${icons.map} ${[u.address, u.city, u.postcode].filter(Boolean).join(', ') || '—'}</span>
+      </div>
+      <div class="entry-actions mt-4">
+        <button class="btn btn-secondary btn-sm" onclick="editUser('${u.id}')">${icons.edit} Edit</button>
+        <button class="btn btn-secondary btn-sm" onclick="adminResetPin('${u.id}')">${icons.key} Reset PIN</button>
+        ${u.id !== state.currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="removeUser('${u.id}')">${icons.trash}</button>` : ''}
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="section-head">
+      <div><h2>Users</h2><div class="sub">${users.length} active staff</div></div>
+      <button class="btn btn-primary btn-sm" onclick="openAddUser()">${icons.plus} Add User</button>
+    </div>
+    <div class="page-pad">${cards}</div>
+    <div style="height:20px;"></div>`;
+}
+
+// ═══════════════════════════════════
+// MODALS
+// ═══════════════════════════════════
+function renderModal() {
+  if (!state.modal) return '';
+  const { modal } = state;
+
+  if (modal === 'add-user' || modal === 'edit-user') {
+    const isEdit = modal === 'edit-user';
+    const d = state.modalData.user || {};
+    const title = isEdit ? 'Edit User' : 'Add User';
+    const roleOpts = ['user','admin'].map(r =>
+      `<option value="${r}" ${(d.role||'user')===r?'selected':''}>${r==='admin'?'Admin':'Staff'}</option>`
+    ).join('');
+    return `<div class="modal-overlay" onclick="closeModalOutside(event)">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">${title}</div>
+          <button class="modal-close" onclick="closeModal()">${icons.x}</button>
+        </div>
+        <div class="form-group"><label>Full Name *</label><input type="text" id="u-name" value="${d.name||''}"/></div>
+        <div class="form-row">
+          <div class="form-group"><label>Role</label><select id="u-role">${roleOpts}</select></div>
+          ${!isEdit ? `<div class="form-group"><label>PIN (4 digits)</label><input type="number" id="u-pin" maxlength="4" placeholder="e.g. 1234"/></div>` : ''}
+        </div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="u-phone" value="${d.phone||''}"/></div>
+        <div class="form-group"><label>Email</label><input type="email" id="u-email" value="${d.email||''}"/></div>
+        <div class="form-group"><label>Address</label><input type="text" id="u-address" placeholder="e.g. 24 Rose Lane" value="${d.address||''}"/></div>
+        <div class="form-row">
+          <div class="form-group"><label>City / Town</label><input type="text" id="u-city" value="${d.city||''}"/></div>
+          <div class="form-group"><label>Postcode</label><input type="text" id="u-postcode" placeholder="e.g. SW1A 1AA" value="${d.postcode||''}"/></div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="saveUser(${isEdit?`'${d.id}'`:''})">
+          ${isEdit ? icons.edit + ' Update' : icons.plus + ' Add User'}
+        </button>
+      </div>
+    </div>`;
+  }
+
+  if (modal === 'change-pin') {
+    const d = state.modalData;
+    return `<div class="modal-overlay" onclick="closeModalOutside(event)">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Change PIN</div>
+          <button class="modal-close" onclick="closeModal()">${icons.x}</button>
+        </div>
+        <div class="form-group">
+          <label>Current PIN</label>
+          <input type="password" id="pin-old" maxlength="4" inputmode="numeric" placeholder="••••"/>
+        </div>
+        <div class="form-group">
+          <label>New PIN</label>
+          <input type="password" id="pin-new" maxlength="4" inputmode="numeric" placeholder="••••"/>
+        </div>
+        <div class="form-group">
+          <label>Confirm New PIN</label>
+          <input type="password" id="pin-confirm" maxlength="4" inputmode="numeric" placeholder="••••"/>
+        </div>
+        <div id="pin-change-error" style="color:var(--coral-dark);font-size:13px;min-height:18px;margin-bottom:10px;"></div>
+        <button class="btn btn-primary btn-full" onclick="doChangePin()">
+          ${icons.key} Change PIN
+        </button>
+      </div>
+    </div>`;
+  }
+
+  if (modal === 'admin-reset-pin') {
+    const uid = state.modalData.targetUserId;
+    const user = state.users.find(u => u.id === uid);
+    return `<div class="modal-overlay" onclick="closeModalOutside(event)">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Reset PIN</div>
+          <button class="modal-close" onclick="closeModal()">${icons.x}</button>
+        </div>
+        <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">Set a new PIN for <strong>${user?.name}</strong></p>
+        <div class="form-group">
+          <label>New PIN (4 digits)</label>
+          <input type="number" id="new-pin-reset" maxlength="4" inputmode="numeric" placeholder="e.g. 9876"/>
+        </div>
+        <div id="reset-pin-error" style="color:var(--coral-dark);font-size:13px;min-height:18px;margin-bottom:10px;"></div>
+        <button class="btn btn-primary btn-full" onclick="doAdminResetPin('${uid}')">
+          ${icons.key} Set New PIN
+        </button>
+      </div>
+    </div>`;
+  }
+
+  return '';
+}
+
+// ═══════════════════════════════════
+// PROFILE MENU
+// ═══════════════════════════════════
+function renderProfileMenu() {
+  if (!state.profileMenu) return '';
+  return `<div class="profile-menu">
+    <div class="profile-menu-item" onclick="openChangePinModal()">
+      ${icons.key} Change PIN
+    </div>
+    <div class="profile-menu-item danger" onclick="logout()">
+      ${icons.logout} Sign Out
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════
+window.nav = (screen) => {
+  state.screen = screen;
+  state.profileMenu = false;
+  if (screen === 'log') {
+    state.modalData = {};
+  }
+  render();
+};
+
+window.pinKey = (key) => {
+  if (key === 'del') {
+    state.pinInput = state.pinInput.slice(0, -1);
+    state.pinError = '';
+  } else if (state.pinInput.length < 4) {
+    state.pinInput += key;
+    if (state.pinInput.length === 4) {
+      setTimeout(() => {
+        tryLogin(state.pinInput);
+      }, 120);
+    }
+  }
+  render();
+};
+
+window.toggleProfileMenu = () => {
+  state.profileMenu = !state.profileMenu;
+  render();
+};
+
+window.openChangePinModal = () => {
+  state.profileMenu = false;
+  state.modal = 'change-pin';
+  render();
+};
+
+window.closeModal = () => {
+  state.modal = null;
+  state.modalData = {};
+  render();
+};
+
+window.closeModalOutside = (e) => {
+  if (e.target.classList.contains('modal-overlay')) closeModal();
+};
+
+window.updateShift = (idx, field, val) => {
+  const entry = state.modalData.editEntry || { date: todayStr(), shifts: [{start:'',end:''}], note:'' };
+  if (!entry.shifts[idx]) entry.shifts[idx] = {start:'',end:''};
+  entry.shifts[idx][field] = val;
+  state.modalData.editEntry = entry;
+  render();
+};
+
+window.addShift = () => {
+  const entry = state.modalData.editEntry || { date: todayStr(), shifts: [{start:'',end:''}], note:'' };
+  if (entry.shifts.length < 3) entry.shifts.push({start:'',end:''});
+  state.modalData.editEntry = entry;
+  render();
+};
+
+window.removeShift = (idx) => {
+  const entry = state.modalData.editEntry || { date: todayStr(), shifts: [{start:'',end:''}], note:'' };
+  entry.shifts.splice(idx, 1);
+  state.modalData.editEntry = entry;
+  render();
+};
+
+window.updateLogDate = (val) => {
+  const entry = state.modalData.editEntry || { date: todayStr(), shifts: [{start:'',end:''}], note:'' };
+  entry.date = val;
+  state.modalData.editEntry = entry;
+};
+
+window.saveEntry = () => {
+  const dateEl = document.getElementById('log-date');
+  const noteEl = document.getElementById('log-note');
+  const entry = state.modalData.editEntry || { shifts: [{start:'',end:''}] };
+  const date = dateEl ? dateEl.value : entry.date || todayStr();
+  const note = noteEl ? noteEl.value : entry.note || '';
+
+  const shifts = entry.shifts || [{start:'',end:''}];
+  const validShifts = shifts.filter(s => s.start && s.end);
+  if (validShifts.length === 0) { showToast('Add at least one complete shift'); return; }
+
+  const total = validShifts.reduce((a, s) => a + roundShift(parseTime(s.start), parseTime(s.end)), 0);
+
+  if (entry.id) {
+    const idx = state.entries.findIndex(e => e.id === entry.id);
+    if (idx >= 0) state.entries[idx] = { ...entry, date, shifts: validShifts, total_mins: total, note };
+    showToast('Entry updated');
+  } else {
+    state.entries.push({
+      id: Date.now().toString(), user_id: state.currentUser.id,
+      date, shifts: validShifts, total_mins: total, note
+    });
+    showToast('Entry saved');
+  }
+  state.modalData = {};
+  state.screen = 'entries';
+  render();
+};
+
+window.editEntry = (id) => {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  state.modalData.editEntry = JSON.parse(JSON.stringify(entry));
+  state.screen = 'log';
+  render();
+};
+
+window.deleteEntry = (id) => {
+  if (!confirm('Delete this entry?')) return;
+  state.entries = state.entries.filter(e => e.id !== id);
+  state.modalData = {};
+  state.screen = 'entries';
+  showToast('Entry deleted');
+  render();
+};
+
+window.setEntriesMonth = (m, y) => {
+  state.entriesMonth = m;
+  state.entriesYear = y;
+  render();
+};
+
+window.setReportTab = (tab) => { state.reportTab = tab; render(); };
+window.setReportMonth = (m, y) => { state.reportMonth = m; state.reportYear = y; render(); };
+window.setReportYear = (y) => { state.reportYear = y; render(); };
+window.setAdminMonth = (m, y) => { state.adminReportMonth = m; state.adminReportYear = y; render(); };
+window.setAdminReportUser = (uid) => { state.adminReportUser = uid; render(); };
+
+window.openAddUser = () => {
+  state.modal = 'add-user';
+  state.modalData = { user: {} };
+  render();
+};
+
+window.editUser = (id) => {
+  const user = state.users.find(u => u.id === id);
+  state.modal = 'edit-user';
+  state.modalData = { user: JSON.parse(JSON.stringify(user)) };
+  render();
+};
+
+window.saveUser = (id) => {
+  const name = document.getElementById('u-name').value.trim();
+  const role = document.getElementById('u-role').value;
+  const phone = document.getElementById('u-phone').value.trim();
+  const email = document.getElementById('u-email').value.trim();
+  const address = document.getElementById('u-address').value.trim();
+  const city = document.getElementById('u-city').value.trim();
+  const postcode = document.getElementById('u-postcode').value.trim().toUpperCase();
+
+  if (!name) { showToast('Name is required'); return; }
+
+  const colors = ['#FF6B8A','#7C5CBF','#00B4C5','#FFB347','#52C97E','#E84D6F','#5E3FA3'];
+
+  if (id) {
+    const idx = state.users.findIndex(u => u.id === id);
+    if (idx >= 0) {
+      state.users[idx] = { ...state.users[idx], name, role, phone, email, address, city, postcode,
+        initials: name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) };
+    }
+    showToast('User updated');
+  } else {
+    const pinEl = document.getElementById('u-pin');
+    const pin = pinEl ? pinEl.value : '0000';
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) { showToast('PIN must be 4 digits'); return; }
+    if (state.users.find(u => u.pin === pin)) { showToast('PIN already in use'); return; }
+    state.users.push({
+      id: 'u' + Date.now(), name, role, pin, phone, email, address, city, postcode,
+      initials: name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2),
+      color: colors[state.users.length % colors.length],
+      hourly_rate: null, active: true
+    });
+    showToast('User added');
+  }
+  closeModal();
+  render();
+};
+
+window.removeUser = (id) => {
+  if (!confirm('Remove this user?')) return;
+  const idx = state.users.findIndex(u => u.id === id);
+  if (idx >= 0) state.users[idx].active = false;
+  showToast('User removed');
+  render();
+};
+
+window.adminResetPin = (uid) => {
+  state.modal = 'admin-reset-pin';
+  state.modalData = { targetUserId: uid };
+  render();
+};
+
+window.doAdminResetPin = (uid) => {
+  const pin = document.getElementById('new-pin-reset').value.trim();
+  if (!/^\d{4}$/.test(pin)) {
+    document.getElementById('reset-pin-error').textContent = 'PIN must be exactly 4 digits';
+    return;
+  }
+  if (state.users.find(u => u.id !== uid && u.pin === pin)) {
+    document.getElementById('reset-pin-error').textContent = 'PIN already in use';
+    return;
+  }
+  const idx = state.users.findIndex(u => u.id === uid);
+  if (idx >= 0) state.users[idx].pin = pin;
+  showToast('PIN reset successfully');
+  closeModal();
+};
+
+window.doChangePin = () => {
+  const old = document.getElementById('pin-old').value;
+  const newPin = document.getElementById('pin-new').value;
+  const confirm2 = document.getElementById('pin-confirm').value;
+  const errEl = document.getElementById('pin-change-error');
+
+  if (old !== state.currentUser.pin) { errEl.textContent = 'Current PIN is incorrect'; return; }
+  if (!/^\d{4}$/.test(newPin)) { errEl.textContent = 'New PIN must be 4 digits'; return; }
+  if (newPin !== confirm2) { errEl.textContent = 'PINs do not match'; return; }
+  if (state.users.find(u => u.id !== state.currentUser.id && u.pin === newPin)) {
+    errEl.textContent = 'PIN already in use'; return;
+  }
+  const idx = state.users.findIndex(u => u.id === state.currentUser.id);
+  if (idx >= 0) { state.users[idx].pin = newPin; state.currentUser.pin = newPin; }
+  showToast('PIN changed successfully');
+  closeModal();
+};
+
+window.showDemoInfo = () => {
+  showToast('Admin: 0000 · Sarah: 1234 · Emma: 5678');
+};
+
+// ═══════════════════════════════════
+// PDF EXPORT
+// ═══════════════════════════════════
+window.exportPDF = (type) => {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const u = state.currentUser;
+  const now = new Date();
+  const m = state.reportMonth, y = state.reportYear;
+
+  // Header
+  doc.setFillColor(124, 92, 191);
+  doc.rect(0, 0, 210, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ShiftLog', 14, 14);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+
+  let title = '', entries = [];
+
+  if (type === 'week') {
+    const week = getWeekBounds(now);
+    title = `Week: ${week.start.toLocaleDateString('en-GB')} – ${week.end.toLocaleDateString('en-GB')}`;
+    entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d >= week.start && d <= week.end;
+    }).sort((a,b)=>a.date.localeCompare(b.date));
+  } else if (type === 'month') {
+    title = `${MONTH_NAMES[m]} ${y}`;
+    entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d.getMonth() === m && d.getFullYear() === y;
+    }).sort((a,b)=>a.date.localeCompare(b.date));
+  } else {
+    title = `Year ${y}`;
+    entries = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y)
+      .sort((a,b)=>a.date.localeCompare(b.date));
+  }
+
+  doc.text(`${title} · ${u.name} · Generated ${now.toLocaleDateString('en-GB')}`, 14, 22);
+  doc.setTextColor(0,0,0);
+
+  const total = sumMins(entries);
+  const h = Math.floor(total/60), mins = total%60;
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica','bold');
+  doc.text(`Total: ${h}h ${mins}m`, 14, 36);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.text(`${entries.length} days worked`, 14, 42);
+
+  doc.autoTable({
+    startY: 48,
+    head: [['Date','Shift 1','Shift 2','Shift 3','Total','Note']],
+    body: entries.map(e => [
+      displayDate(e.date),
+      e.shifts[0] ? `${e.shifts[0].start}–${e.shifts[0].end}` : '',
+      e.shifts[1] ? `${e.shifts[1].start}–${e.shifts[1].end}` : '',
+      e.shifts[2] ? `${e.shifts[2].start}–${e.shifts[2].end}` : '',
+      formatMins(e.total_mins),
+      e.note || ''
+    ]),
+    headStyles: { fillColor: [255,107,138], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [253,245,255] },
+    styles: { fontSize: 9 },
+  });
+
+  doc.save(`ShiftLog_${u.name.replace(' ','_')}_${title.replace(' ','_')}.pdf`);
+  showToast('PDF exported');
+};
+
+window.exportAdminPDF = () => {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const m = state.adminReportMonth, y = state.adminReportYear;
+  const targetUid = state.adminReportUser;
+  const now = new Date();
+
+  doc.setFillColor(124, 92, 191);
+  doc.rect(0, 0, 210, 28, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica','bold');
+  doc.text('ShiftLog — Admin Report', 14, 14);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text(`${MONTH_NAMES[m]} ${y} · Generated ${now.toLocaleDateString('en-GB')}`, 14, 22);
+  doc.setTextColor(0,0,0);
+
+  const usersToShow = targetUid === 'all' ? state.users.filter(u=>u.active) : state.users.filter(u=>u.id===targetUid);
+
+  let startY = 36;
+  usersToShow.forEach(u => {
+    const ue = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d.getMonth() === m && d.getFullYear() === y;
+    }).sort((a,b)=>a.date.localeCompare(b.date));
+
+    const total = sumMins(ue);
+    doc.setFontSize(12);
+    doc.setFont('helvetica','bold');
+    doc.text(`${u.name} (${u.role}) — Total: ${formatMins(total)} · ${ue.length} days`, 14, startY);
+    doc.setFont('helvetica','normal');
+    startY += 4;
+
+    doc.autoTable({
+      startY,
+      head: [['Date','Shifts','Total','Note']],
+      body: ue.map(e => [
+        displayDate(e.date),
+        e.shifts.map(s=>`${s.start}–${s.end}`).join(', '),
+        formatMins(e.total_mins),
+        e.note || ''
+      ]),
+      headStyles: { fillColor: [255,107,138], textColor:255 },
+      alternateRowStyles: { fillColor: [253,245,255] },
+      styles: { fontSize: 8 },
+      margin: { left: 14, right: 14 }
+    });
+
+    startY = doc.lastAutoTable.finalY + 10;
+  });
+
+  doc.save(`ShiftLog_Admin_${MONTH_SHORT[m]}${y}.pdf`);
+  showToast('Admin PDF exported');
+};
+
+// ═══════════════════════════════════
+// TOAST
+// ═══════════════════════════════════
+function showToast(msg) {
+  state.toast = msg;
+  render();
+  setTimeout(() => { state.toast = null; render(); }, 2500);
+}
+
+// ═══════════════════════════════════
+// MAIN RENDER
+// ═══════════════════════════════════
+function render() {
+  const app = document.getElementById('app');
+
+  // Offline blocker — always shown if offline (except on pin screen during first load)
+  if (state.online === false) {
+    app.innerHTML = `<div class="offline-screen">
+      ${logoSVG(64)}
+      <h2>No Connection</h2>
+      <p>ShiftLog requires an internet connection.<br/>Please check your connection and try again.</p>
+      <button class="btn btn-primary" onclick="checkOnline()">${icons.refresh} Try Again</button>
+    </div>`;
+    return;
+  }
+
+  if (state.screen === 'pin') {
+    app.innerHTML = renderPin();
+    return;
+  }
+
+  let screenContent = '';
+  switch (state.screen) {
+    case 'home': screenContent = renderHome(); break;
+    case 'log': screenContent = renderLog(); break;
+    case 'entries': screenContent = renderEntries(); break;
+    case 'reports': screenContent = renderReports(); break;
+    case 'users': screenContent = renderUsers(); break;
+    case 'admin-reports': screenContent = renderAdminReports(); break;
+    default: screenContent = renderHome();
+  }
+
+  app.innerHTML = `
+    ${renderTopbar()}
+    <div class="screen">${screenContent}</div>
+    ${renderNav()}
+    ${renderModal()}
+    ${renderProfileMenu()}
+    ${state.toast ? `<div class="toast">${state.toast}</div>` : ''}
+  `;
+}
+
+// ═══════════════════════════════════
+// CONNECTIVITY
+// ═══════════════════════════════════
+window.checkOnline = function() {
+  state.online = null;
+  render();
+  // Fetch a tiny resource to confirm real connectivity
+  fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store' })
+    .then(() => { state.online = true; render(); })
+    .catch(() => { state.online = false; render(); });
+};
+
+window.refreshApp = function() {
+  checkOnline();
+  showToast('Refreshed');
+};
+
+window.exitApp = function() {
+  if (confirm('Exit ShiftLog?')) {
+    logout();
+  }
+};
+
+window.addEventListener('online',  () => { state.online = true;  render(); });
+window.addEventListener('offline', () => { state.online = false; render(); });
+
+// ═══════════════════════════════════
+// INIT
+// ═══════════════════════════════════
+initDemoData();
+checkOnline();   // sets state.online then calls render()
+</script>
+</body>
+</html>
