@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#FF6B8A"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
-<meta name="apple-mobile-web-app-title" content="ShiftLog"/>
-<title>ShiftLog</title>
+<meta name="apple-mobile-web-app-title" content="TimeShift"/>
+<title>TimeShift</title>
 <link rel="manifest" href="./manifest.json"/>
 <link rel="apple-touch-icon" href="./apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -474,12 +474,40 @@
 // SHIFTLOG APP — Full Implementation
 // ════════════════════════════════════════════════════════════
 
-// ── SUPABASE CONFIG (replace with real keys) ──────────────
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+// ── FIREBASE CONFIG ───────────────────────────────────────
+// Loaded from localStorage (set via Admin → Config screen)
+// Falls back to DEMO_MODE if not configured
+function getFirebaseConfig() {
+  try { return JSON.parse(localStorage.getItem('ts_firebase') || 'null'); } catch { return null; }
+}
 
-// ── DEMO MODE (runs without Supabase) ─────────────────────
-const DEMO_MODE = true;
+// ── DEMO MODE (runs without Firebase) ─────────────────────
+let DEMO_MODE = !getFirebaseConfig();
+
+// ── FIREBASE SDK (loaded dynamically when config exists) ──
+let db = null;
+let fbApp = null;
+
+async function initFirebase() {
+  const cfg = getFirebaseConfig();
+  if (!cfg) { DEMO_MODE = true; return; }
+  try {
+    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const { getFirestore, collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy }
+      = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+
+    fbApp = getApps().length ? getApps()[0] : initializeApp(cfg);
+    db = getFirestore(fbApp);
+
+    // Expose Firestore helpers globally for use in actions
+    window._fb = { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy };
+    DEMO_MODE = false;
+  } catch(e) {
+    console.error('Firebase init failed:', e);
+    DEMO_MODE = true;
+    showToast('Firebase connection failed — demo mode');
+  }
+}
 
 // ═══════════════════════════════════
 // STATE
@@ -508,6 +536,7 @@ let state = {
   adminReportUser: 'all',
   adminReportMonth: new Date().getMonth(),
   adminReportYear: new Date().getFullYear(),
+  loading: false,
 };
 
 // ═══════════════════════════════════
@@ -518,7 +547,7 @@ function initDemoData() {
     {
       id: 'u1', name: 'Admin User', pin: '0000', role: 'admin',
       initials: 'AU', color: '#7C5CBF',
-      phone: '07700 900001', email: 'admin@shiftlog.app',
+      phone: '07700 900001', email: 'admin@timeshift.app',
       address: '1 High Street', city: 'London', postcode: 'EC1A 1BB',
       hourly_rate: null, active: true
     },
@@ -779,7 +808,7 @@ function renderTopbar() {
       ${showBack ? `<div class="topbar-btn back" onclick="nav('home')" title="Back to Home">${icons.chevronLeft}</div>` : ''}
       ${logoSVG(26)}
       <div>
-        <div class="topbar-title">ShiftLog</div>
+        <div class="topbar-title">TimeShift</div>
       </div>
     </div>
     <div class="topbar-actions">
@@ -820,7 +849,7 @@ function renderPin() {
 
   return `<div class="pin-screen">
     <div class="pin-logo">${logoSVG(64)}</div>
-    <div class="pin-title">ShiftLog</div>
+    <div class="pin-title">TimeShift</div>
     <div class="pin-subtitle">${subtitle}</div>
     <div class="pin-dots">${dots}</div>
     <div class="pin-error">${state.pinError}</div>
@@ -1267,45 +1296,54 @@ function renderUsers() {
 // SETTINGS (Admin — Supabase Config)
 // ═══════════════════════════════════
 function renderSettings() {
-  const saved = JSON.parse(localStorage.getItem('sl_supabase') || '{}');
-  const url = saved.url || '';
-  const key = saved.key || '';
-  const isConnected = !!(url && key);
+  const saved = JSON.parse(localStorage.getItem('ts_firebase') || '{}');
+  const isConnected = !DEMO_MODE && !!db;
+  const apiKey    = saved.apiKey    || '';
+  const projectId = saved.projectId || '';
+  const appId     = saved.appId     || '';
   return `
     <div class="section-head">
-      <div><h2>Database Config</h2><div class="sub">Supabase connection settings</div></div>
+      <div><h2>Database Config</h2><div class="sub">Firebase connection settings</div></div>
     </div>
     <div class="page-pad">
       <div class="card card-sm mb-4" style="background:${isConnected ? 'linear-gradient(135deg,#E6F9EF,#E0F7FA)' : 'linear-gradient(135deg,#FFF4E5,#FFE8EE)'}; border-color:${isConnected ? '#52C97E' : 'var(--amber)'};">
         <div class="flex-between">
-          <span class="fw-700" style="font-size:12px;color:${isConnected ? '#1A7A42' : '#A05A00'};">${isConnected ? '✓ Supabase configured' : '⚠ Not configured — running in demo mode'}</span>
+          <span class="fw-700" style="font-size:12px;color:${isConnected ? '#1A7A42' : '#A05A00'};">
+            ${isConnected ? '✓ Firebase connected' : '⚠ Not configured — running in demo mode'}
+          </span>
           ${isConnected ? `<span class="chip chip-green">Live</span>` : `<span class="chip chip-amber">Demo</span>`}
         </div>
-        ${isConnected ? `<div class="text-xs text-muted mt-1">${url}</div>` : ''}
+        ${isConnected ? `<div class="text-xs text-muted mt-1">Project: ${projectId}</div>` : ''}
       </div>
       <div class="form-group">
-        <label>Supabase Project URL</label>
-        <input type="url" id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co" value="${url}"/>
-        <div class="hint">Found in your Supabase project → Settings → API</div>
+        <label>API Key</label>
+        <input type="text" id="fb-apikey" placeholder="AIzaSy..." value="${apiKey}"/>
+        <div class="hint">Firebase Console → Project Settings → Web app → apiKey</div>
       </div>
       <div class="form-group">
-        <label>Anon / Public Key</label>
-        <input type="text" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." value="${key}"/>
-        <div class="hint">Use the anon/public key only — never the service role key</div>
+        <label>Project ID</label>
+        <input type="text" id="fb-projectid" placeholder="my-timeshift-app" value="${projectId}"/>
+        <div class="hint">Firebase Console → Project Settings → Project ID</div>
       </div>
-      <button class="btn btn-primary btn-full mt-4" onclick="saveSupabaseConfig()">
-        ${icons.key} Save Configuration
+      <div class="form-group">
+        <label>App ID</label>
+        <input type="text" id="fb-appid" placeholder="1:123456789:web:abc123" value="${appId}"/>
+        <div class="hint">Firebase Console → Project Settings → Web app → appId</div>
+      </div>
+      <button class="btn btn-primary btn-full mt-4" onclick="saveFirebaseConfig()">
+        ${icons.key} Connect to Firebase
       </button>
-      ${isConnected ? `<button class="btn btn-danger btn-full mt-4" onclick="clearSupabaseConfig()">
-        ${icons.trash} Clear Configuration
+      ${saved.apiKey ? `<button class="btn btn-danger btn-full mt-4" onclick="clearFirebaseConfig()">
+        ${icons.trash} Clear &amp; Return to Demo
       </button>` : ''}
       <div class="card card-sm mt-4" style="background:var(--bg2);">
-        <div class="fw-700 text-sm mb-4" style="margin-bottom:6px;">Where to find your keys</div>
-        <div class="text-xs text-muted" style="line-height:1.8;">
-          1. Go to <strong>supabase.com</strong> and open your project<br/>
-          2. Click <strong>Settings</strong> (gear icon) → <strong>API</strong><br/>
-          3. Copy the <strong>Project URL</strong> and <strong>anon public</strong> key<br/>
-          4. Paste them above and tap Save
+        <div class="fw-700" style="font-size:12px;margin-bottom:6px;">Where to find these values</div>
+        <div class="text-xs text-muted" style="line-height:1.9;">
+          1. Go to <strong>console.firebase.google.com</strong><br/>
+          2. Open your project → click the <strong>gear icon</strong> → <strong>Project settings</strong><br/>
+          3. Scroll to <strong>Your apps</strong> → select your Web app<br/>
+          4. Copy <strong>apiKey</strong>, <strong>projectId</strong> and <strong>appId</strong><br/>
+          5. Paste above and tap Connect
         </div>
       </div>
     </div>
@@ -1495,7 +1533,7 @@ window.updateLogDate = (val) => {
   state.modalData.editEntry = entry;
 };
 
-window.saveEntry = () => {
+window.saveEntry = async () => {
   const dateEl = document.getElementById('log-date');
   const noteEl = document.getElementById('log-note');
   const entry = state.modalData.editEntry || { shifts: [{start:'',end:''}] };
@@ -1509,14 +1547,26 @@ window.saveEntry = () => {
   const total = validShifts.reduce((a, s) => a + roundShift(parseTime(s.start), parseTime(s.end)), 0);
 
   if (entry.id) {
+    const updated = { ...entry, date, shifts: validShifts, total_mins: total, note };
     const idx = state.entries.findIndex(e => e.id === entry.id);
-    if (idx >= 0) state.entries[idx] = { ...entry, date, shifts: validShifts, total_mins: total, note };
+    if (idx >= 0) state.entries[idx] = updated;
+    if (!DEMO_MODE && db) {
+      try {
+        const { doc, setDoc } = window._fb;
+        await setDoc(doc(db, 'entries', entry.id), updated);
+      } catch(e) { showToast('Save failed: ' + e.message); return; }
+    }
     showToast('Entry updated');
   } else {
-    state.entries.push({
-      id: Date.now().toString(), user_id: state.currentUser.id,
-      date, shifts: validShifts, total_mins: total, note
-    });
+    const id = Date.now().toString();
+    const newEntry = { id, user_id: state.currentUser.id, date, shifts: validShifts, total_mins: total, note };
+    state.entries.push(newEntry);
+    if (!DEMO_MODE && db) {
+      try {
+        const { doc, setDoc } = window._fb;
+        await setDoc(doc(db, 'entries', id), newEntry);
+      } catch(e) { showToast('Save failed: ' + e.message); return; }
+    }
     showToast('Entry saved');
   }
   state.modalData = {};
@@ -1532,11 +1582,17 @@ window.editEntry = (id) => {
   render();
 };
 
-window.deleteEntry = (id) => {
+window.deleteEntry = async (id) => {
   if (!confirm('Delete this entry?')) return;
   state.entries = state.entries.filter(e => e.id !== id);
   state.modalData = {};
   state.screen = 'entries';
+  if (!DEMO_MODE && db) {
+    try {
+      const { doc, deleteDoc } = window._fb;
+      await deleteDoc(doc(db, 'entries', id));
+    } catch(e) { showToast('Delete failed: ' + e.message); return; }
+  }
   showToast('Entry deleted');
   render();
 };
@@ -1566,7 +1622,7 @@ window.editUser = (id) => {
   render();
 };
 
-window.saveUser = (id) => {
+window.saveUser = async (id) => {
   const name = document.getElementById('u-name').value.trim();
   const role = document.getElementById('u-role').value;
   const phone = document.getElementById('u-phone').value.trim();
@@ -1582,8 +1638,15 @@ window.saveUser = (id) => {
   if (id) {
     const idx = state.users.findIndex(u => u.id === id);
     if (idx >= 0) {
-      state.users[idx] = { ...state.users[idx], name, role, phone, email, address, city, postcode,
+      const updated = { ...state.users[idx], name, role, phone, email, address, city, postcode,
         initials: name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) };
+      state.users[idx] = updated;
+      if (!DEMO_MODE && db) {
+        try {
+          const { doc, setDoc } = window._fb;
+          await setDoc(doc(db, 'users', id), updated);
+        } catch(e) { showToast('Save failed: ' + e.message); return; }
+      }
     }
     showToast('User updated');
   } else {
@@ -1591,22 +1654,38 @@ window.saveUser = (id) => {
     const pin = pinEl ? pinEl.value : '0000';
     if (pin.length !== 4 || !/^\d{4}$/.test(pin)) { showToast('PIN must be 4 digits'); return; }
     if (state.users.find(u => u.pin === pin)) { showToast('PIN already in use'); return; }
-    state.users.push({
-      id: 'u' + Date.now(), name, role, pin, phone, email, address, city, postcode,
+    const newId = 'u' + Date.now();
+    const newUser = {
+      id: newId, name, role, pin, phone, email, address, city, postcode,
       initials: name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2),
       color: colors[state.users.length % colors.length],
       hourly_rate: null, active: true
-    });
+    };
+    state.users.push(newUser);
+    if (!DEMO_MODE && db) {
+      try {
+        const { doc, setDoc } = window._fb;
+        await setDoc(doc(db, 'users', newId), newUser);
+      } catch(e) { showToast('Save failed: ' + e.message); return; }
+    }
     showToast('User added');
   }
   closeModal();
   render();
 };
 
-window.removeUser = (id) => {
+window.removeUser = async (id) => {
   if (!confirm('Remove this user?')) return;
   const idx = state.users.findIndex(u => u.id === id);
-  if (idx >= 0) state.users[idx].active = false;
+  if (idx >= 0) {
+    state.users[idx].active = false;
+    if (!DEMO_MODE && db) {
+      try {
+        const { doc, updateDoc } = window._fb;
+        await updateDoc(doc(db, 'users', id), { active: false });
+      } catch(e) { showToast('Remove failed: ' + e.message); return; }
+    }
+  }
   showToast('User removed');
   render();
 };
@@ -1617,7 +1696,7 @@ window.adminResetPin = (uid) => {
   render();
 };
 
-window.doAdminResetPin = (uid) => {
+window.doAdminResetPin = async (uid) => {
   const pin = document.getElementById('new-pin-reset').value.trim();
   if (!/^\d{4}$/.test(pin)) {
     document.getElementById('reset-pin-error').textContent = 'PIN must be exactly 4 digits';
@@ -1628,12 +1707,20 @@ window.doAdminResetPin = (uid) => {
     return;
   }
   const idx = state.users.findIndex(u => u.id === uid);
-  if (idx >= 0) state.users[idx].pin = pin;
+  if (idx >= 0) {
+    state.users[idx].pin = pin;
+    if (!DEMO_MODE && db) {
+      try {
+        const { doc, updateDoc } = window._fb;
+        await updateDoc(doc(db, 'users', uid), { pin });
+      } catch(e) { showToast('Reset failed: ' + e.message); return; }
+    }
+  }
   showToast('PIN reset successfully');
   closeModal();
 };
 
-window.doChangePin = () => {
+window.doChangePin = async () => {
   const old = document.getElementById('pin-old').value;
   const newPin = document.getElementById('pin-new').value;
   const confirm2 = document.getElementById('pin-confirm').value;
@@ -1646,7 +1733,16 @@ window.doChangePin = () => {
     errEl.textContent = 'PIN already in use'; return;
   }
   const idx = state.users.findIndex(u => u.id === state.currentUser.id);
-  if (idx >= 0) { state.users[idx].pin = newPin; state.currentUser.pin = newPin; }
+  if (idx >= 0) {
+    state.users[idx].pin = newPin;
+    state.currentUser.pin = newPin;
+    if (!DEMO_MODE && db) {
+      try {
+        const { doc, updateDoc } = window._fb;
+        await updateDoc(doc(db, 'users', state.currentUser.id), { pin: newPin });
+      } catch(e) { showToast('Save failed: ' + e.message); return; }
+    }
+  }
   showToast('PIN changed successfully');
   closeModal();
 };
@@ -1671,7 +1767,7 @@ window.exportPDF = (type) => {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('ShiftLog', 14, 14);
+  doc.text('TimeShift', 14, 14);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
 
@@ -1727,7 +1823,7 @@ window.exportPDF = (type) => {
     styles: { fontSize: 9 },
   });
 
-  doc.save(`ShiftLog_${u.name.replace(' ','_')}_${title.replace(' ','_')}.pdf`);
+  doc.save(`TimeShift_${u.name.replace(' ','_')}_${title.replace(' ','_')}.pdf`);
   showToast('PDF exported');
 };
 
@@ -1743,7 +1839,7 @@ window.exportAdminPDF = () => {
   doc.setTextColor(255,255,255);
   doc.setFontSize(18);
   doc.setFont('helvetica','bold');
-  doc.text('ShiftLog — Admin Report', 14, 14);
+  doc.text('TimeShift — Admin Report', 14, 14);
   doc.setFontSize(10);
   doc.setFont('helvetica','normal');
   doc.text(`${MONTH_NAMES[m]} ${y} · Generated ${now.toLocaleDateString('en-GB')}`, 14, 22);
@@ -1784,7 +1880,7 @@ window.exportAdminPDF = () => {
     startY = doc.lastAutoTable.finalY + 10;
   });
 
-  doc.save(`ShiftLog_Admin_${MONTH_SHORT[m]}${y}.pdf`);
+  doc.save(`TimeShift_Admin_${MONTH_SHORT[m]}${y}.pdf`);
   showToast('Admin PDF exported');
 };
 
@@ -1803,12 +1899,22 @@ function showToast(msg) {
 function render() {
   const app = document.getElementById('app');
 
+  // Loading overlay
+  if (state.loading) {
+    app.innerHTML = `<div class="offline-screen">
+      ${logoSVG(56)}
+      <h2 style="margin-top:16px;">Loading…</h2>
+      <p>Connecting to Firebase</p>
+    </div>`;
+    return;
+  }
+
   // Offline blocker — always shown if offline (except on pin screen during first load)
   if (state.online === false) {
     app.innerHTML = `<div class="offline-screen">
       ${logoSVG(64)}
       <h2>No Connection</h2>
-      <p>ShiftLog requires an internet connection.<br/>Please check your connection and try again.</p>
+      <p>TimeShift requires an internet connection.<br/>Please check your connection and try again.</p>
       <button class="btn btn-primary" onclick="checkOnline()">${icons.refresh} Try Again</button>
     </div>`;
     return;
@@ -1842,25 +1948,58 @@ function render() {
 }
 
 // ═══════════════════════════════════
-// SUPABASE CONFIG ACTIONS
+// FIREBASE CONFIG ACTIONS
 // ═══════════════════════════════════
-window.saveSupabaseConfig = function() {
-  const url = document.getElementById('sb-url').value.trim();
-  const key = document.getElementById('sb-key').value.trim();
-  if (!url || !key) { showToast('Both fields are required'); return; }
-  if (!url.startsWith('https://')) { showToast('URL must start with https://'); return; }
-  if (!key.startsWith('eyJ')) { showToast('Key looks incorrect — check and retry'); return; }
-  localStorage.setItem('sl_supabase', JSON.stringify({ url, key }));
-  showToast('Configuration saved — reload to apply');
+window.saveFirebaseConfig = async function() {
+  const apiKey    = document.getElementById('fb-apikey').value.trim();
+  const projectId = document.getElementById('fb-projectid').value.trim();
+  const appId     = document.getElementById('fb-appid').value.trim();
+  if (!apiKey || !projectId || !appId) { showToast('All three fields are required'); return; }
+  const cfg = {
+    apiKey,
+    projectId,
+    appId,
+    authDomain: `${projectId}.firebaseapp.com`,
+    storageBucket: `${projectId}.appspot.com`,
+    messagingSenderId: '',
+  };
+  localStorage.setItem('ts_firebase', JSON.stringify(cfg));
+  showToast('Saved — connecting to Firebase…');
+  await initFirebase();
+  if (!DEMO_MODE) {
+    await loadFirebaseData();
+    showToast('Firebase connected ✓');
+  }
   render();
 };
 
-window.clearSupabaseConfig = function() {
-  if (!confirm('Clear Supabase configuration? App will return to demo mode.')) return;
-  localStorage.removeItem('sl_supabase');
-  showToast('Configuration cleared');
+window.clearFirebaseConfig = function() {
+  if (!confirm('Clear Firebase config? App will return to demo mode.')) return;
+  localStorage.removeItem('ts_firebase');
+  db = null; fbApp = null; DEMO_MODE = true;
+  initDemoData();
+  showToast('Cleared — running in demo mode');
   render();
 };
+
+// Load all users and entries from Firestore into state
+async function loadFirebaseData() {
+  if (!db) return;
+  try {
+    const { collection, getDocs } = window._fb;
+    state.loading = true; render();
+    const [uSnap, eSnap] = await Promise.all([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'entries'))
+    ]);
+    state.users   = uSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.entries = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.loading = false;
+  } catch(e) {
+    state.loading = false;
+    showToast('Failed to load data: ' + e.message);
+  }
+}
 
 // ═══════════════════════════════════
 // CONNECTIVITY
@@ -1880,7 +2019,7 @@ window.refreshApp = function() {
 };
 
 window.exitApp = function() {
-  if (confirm('Exit ShiftLog?')) {
+  if (confirm('Exit TimeShift?')) {
     logout();
   }
 };
@@ -1891,8 +2030,15 @@ window.addEventListener('offline', () => { state.online = false; render(); });
 // ═══════════════════════════════════
 // INIT
 // ═══════════════════════════════════
-initDemoData();
-checkOnline();   // sets state.online then calls render()
+async function init() {
+  initDemoData();          // always load demo data as baseline
+  await initFirebase();    // attempt Firebase connection
+  if (!DEMO_MODE && db) {
+    await loadFirebaseData(); // replace demo data with live data
+  }
+  checkOnline();           // sets state.online then calls render()
+}
+init();
 </script>
 </body>
 </html>

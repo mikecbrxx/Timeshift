@@ -1,4 +1,4 @@
-# ShiftLog — Deployment Guide
+# TimeShift — Deployment Guide
 
 ## Files to upload to GitHub
 
@@ -6,140 +6,172 @@
 |------|---------|
 | `index.html` | The entire application |
 | `manifest.json` | PWA metadata — name, icons, theme colour |
-| `sw.js` | Service worker — PWA install only, online-only app |
-| `icon-192.png` | Android home screen / app icon |
+| `sw.js` | Service worker — PWA install, online-only |
+| `icon-192.png` | Android home screen icon |
 | `icon-512.png` | Android splash screen icon |
 | `apple-touch-icon.png` | iOS home screen icon (180×180) |
 
-> **Note:** ShiftLog requires an active internet connection. If the device goes offline, a full-screen blocker is shown and the app is unusable until connectivity is restored.
-
-> **Logo:** When you have your real logo, replace the three PNG files with the same filenames and push — nothing else needs to change.
+> **Logo:** Replace the three PNG files with your real logo when ready — same filenames, nothing else changes.
 
 ---
 
-## GitHub Pages — First Time Setup
+## Part 1 — GitHub Pages Setup
 
 ### Step 1 — Create a repository
 1. Go to [github.com](https://github.com) and sign in
-2. Click **+** (top right) → **New repository**
-3. Name it (e.g. `shiftlog`), set to **Public**
-4. Leave all other options as default and click **Create repository**
+2. Click **+** → **New repository**
+3. Name it (e.g. `timeshift`), set to **Public**
+4. Click **Create repository**
 
-### Step 2 — Upload the files
-**Option A — via the GitHub website (easiest):**
-1. On your new repo page, click **uploading an existing file**
-2. Drag and drop all 6 files into the upload area
-3. Scroll down and click **Commit changes**
+### Step 2 — Upload files
+**Via GitHub website (easiest):**
+1. On the repo page click **uploading an existing file**
+2. Drag and drop all 6 files
+3. Click **Commit changes**
 
-**Option B — via Git on your computer:**
+**Via Git on your computer:**
 ```bash
 git init
 git add .
-git commit -m "Initial ShiftLog deploy"
+git commit -m "Initial TimeShift deploy"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/shiftlog.git
+git remote add origin https://github.com/YOUR_USERNAME/timeshift.git
 git push -u origin main
 ```
 
 ### Step 3 — Enable GitHub Pages
-1. In your repo, go to **Settings** (top tab)
-2. Scroll down to **Pages** in the left sidebar
-3. Under **Source**, select **Deploy from a branch**
-4. Set branch to `main`, folder to `/ (root)`
-5. Click **Save**
-6. Wait about 60 seconds, then your app is live at:
-   `https://YOUR_USERNAME.github.io/shiftlog/`
+1. Go to repo → **Settings** → **Pages**
+2. Under **Source** select **Deploy from a branch**
+3. Set branch to `main`, folder to `/ (root)`
+4. Click **Save**
+5. Live at: `https://YOUR_USERNAME.github.io/timeshift/` within ~60 seconds
 
-> GitHub will show a blue banner with your live URL once it's ready. You can also check the **Actions** tab to see the deploy progress.
-
-### Step 4 — Test the install
-- **Android:** Open the URL in Chrome → tap ⋮ menu → **Add to Home screen** → **Install**
-- **iOS:** Open the URL in Safari → tap Share (□↑) → **Add to Home Screen** → **Add**
+### Step 4 — Install on mobile
+- **Android (Chrome):** tap ⋮ → Add to Home screen → Install
+- **iOS (Safari only):** tap Share (□↑) → Add to Home Screen → Add
 
 ---
 
-## Updating the App
-When new versions are provided, just upload the changed files to the repo and commit. GitHub Pages redeploys automatically within seconds. Users will get the update on their next visit.
+## Part 2 — Firebase Setup
 
----
+### Step 1 — Create a Firebase project
+1. Go to [console.firebase.google.com](https://console.firebase.google.com)
+2. Click **Add project**
+3. Name it (e.g. `timeshift`) — disable Google Analytics if prompted
+4. Click **Create project**
 
-## Custom Domain (Optional)
-1. In Settings → Pages → **Custom domain**, enter your domain (e.g. `shiftlog.yourdomain.com`)
-2. Add a `CNAME` DNS record at your domain registrar pointing to `YOUR_USERNAME.github.io`
-3. Tick **Enforce HTTPS** once the domain validates
+### Step 2 — Create a Firestore database
+1. From the project overview tap the **☰ hamburger menu** (top left)
+2. Find and tap **Firestore Database** — you'll see a **Cloud Firestore** page with a **Create database** button
+3. Tap **Create database** — a 3-step wizard opens:
 
----
+**Step 1 of 3 — Select edition**
+- Leave **Standard edition** selected
+- Tap **Next**
 
-## Supabase Setup (when ready to go live)
+**Step 2 of 3 — Database ID and location**
+- Leave **Database ID** as `(default)`
+- Change **Location** from `nam5 (United States)` to `eur3 (Europe)` for UK-based storage
+- Note: location cannot be changed later
+- Tap **Next**
 
-### 1. Create a project at [supabase.com](https://supabase.com)
+**Step 3 of 3 — Configure**
+- Select **Start in test mode**
+- You'll see the default rules and a warning that access is open for 30 days — that's fine, we update the rules in Step 5
+- Tap **Create**
 
-### 2. Run this SQL in the Supabase SQL editor:
+4. After a short wait you'll land on the **Database** screen showing:
+   - Tabs across the top: **Data · Rules · Indexes · Disaster recovery**
+   - A panel view with `(default)` and **+ Start collection**
+   - This means the database is ready ✓
 
-```sql
--- USERS TABLE
-create table users (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  pin text not null,
-  role text not null default 'user',
-  phone text,
-  email text,
-  address text,
-  city text,
-  postcode text,
-  color text default '#FF6B8A',
-  initials text,
-  hourly_rate decimal(10,2),
-  active boolean default true,
-  created_at timestamptz default now()
-);
+### Step 3 — Register a web app and get your config keys
+1. Tap the **☰ menu** and tap the **project name** at the top to go back to the project overview
+2. On the project overview page look for the icons row — tap the **Web icon** (`</>`)
+3. Give the app a nickname (e.g. `TimeShift Web`) — no need to tick Firebase Hosting
+4. Tap **Register app**
+5. You'll see a `firebaseConfig` block like this:
 
--- ENTRIES TABLE
-create table entries (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references users(id),
-  date date not null,
-  shifts jsonb not null default '[]',
-  total_mins integer not null,
-  note text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
--- ROW LEVEL SECURITY
-alter table users enable row level security;
-alter table entries enable row level security;
-
-create policy "Users see own entries" on entries
-  for select using (user_id = auth.uid());
-
-create policy "Users insert own entries" on entries
-  for insert with check (user_id = auth.uid());
-
-create policy "Users update own entries" on entries
-  for update using (user_id = auth.uid());
-
-create policy "Users delete own entries" on entries
-  for delete using (user_id = auth.uid());
-
-create policy "Admins manage all entries" on entries
-  for all using (
-    exists (select 1 from users where id = auth.uid() and role = 'admin')
-  );
-```
-
-### 3. Update index.html (top of the script section):
 ```javascript
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_KEY = 'your-anon-public-key';
-const DEMO_MODE = false;
+const firebaseConfig = {
+  apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXXXXX",
+  authDomain: "timeshift-xxxxx.firebaseapp.com",
+  projectId: "timeshift-xxxxx",
+  storageBucket: "timeshift-xxxxx.appspot.com",
+  messagingSenderId: "123456789012",
+  appId: "1:123456789012:web:abcdef1234567890"
+};
 ```
-Then commit and push the updated `index.html`.
+
+6. **Copy these three values** — you'll need them in Step 4:
+   - `apiKey`
+   - `projectId`
+   - `appId`
+
+7. Tap **Continue to console**
+
+### Step 4 — Connect TimeShift to Firebase
+1. Open TimeShift in your browser and log in as Admin (PIN: `0000` in demo mode)
+2. Tap the **Config** tab in the bottom nav (gear icon)
+3. Paste in your three values: **API Key**, **Project ID**, **App ID**
+4. Tap **Connect to Firebase**
+5. The app connects, loads live data, and shows a green **Live** badge ✓
+
+### Step 5 — Update Firestore security rules
+The test mode rules expire after 30 days. Replace them now with permanent open rules suitable for a PIN-protected internal app:
+
+1. In Firebase Console → **Firestore Database** → tap the **Rules** tab
+2. Replace the entire contents with:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    match /entries/{entryId} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+3. Tap **Publish**
+
+> This keeps the database open to anyone who has your Firebase config — acceptable for an internal PIN-protected app. Firebase Authentication can be added later for stronger security.
+
+### Step 6 — Add your first Admin user
+The database starts empty so you need to create the first admin directly in Firestore:
+
+1. Firebase Console → **Firestore Database** → **Data** tab
+2. Tap **+ Start collection**
+3. **Collection ID:** `users` → tap **Next**
+4. **Document ID:** tap **Auto-ID**
+5. Add these fields one by one using **+ Add field**:
+
+| Field | Type | Value |
+|-------|------|-------|
+| id | string | (copy the auto-generated Document ID) |
+| name | string | Your full name |
+| pin | string | `0000` |
+| role | string | `admin` |
+| active | boolean | `true` |
+| initials | string | Your initials e.g. `MJ` |
+| color | string | `#7C5CBF` |
+| phone | string | Your phone number |
+| email | string | Your email |
+| address | string | Your address |
+| city | string | Your city |
+| postcode | string | Your postcode |
+| hourly_rate | null | (leave as null) |
+
+6. Tap **Save**
+7. Log in to TimeShift with PIN `0000`, go to **Users** and add remaining staff from there
 
 ---
 
-## Demo Credentials
+## Demo Credentials (before Firebase is connected)
 | User | PIN | Role |
 |------|-----|------|
 | Admin User | 0000 | Admin |
@@ -148,38 +180,20 @@ Then commit and push the updated `index.html`.
 
 ---
 
-## Replacing the Logo
-1. Provide your logo image
-2. Replacement PNG files will be generated at the correct sizes
-3. Replace `icon-192.png`, `icon-512.png`, and `apple-touch-icon.png` in the repo
-4. Commit and push — done, no other files need changing
+## Updating the App
+Upload changed files to GitHub and commit — Pages redeploys in seconds.
 
 ---
 
 ## Future: Hourly Rate / Payroll
-The `hourly_rate` column is already in the schema and hidden in the UI. When ready to activate:
-- Unhide the rate field in the user edit form
-- Add a pay column to reports using `total_mins / 60 * hourly_rate`
-- No schema changes needed
+`hourly_rate` is already in the user schema (stored as `null`).
+When ready: unhide the field in the user edit form and add a pay column
+to reports using `total_mins / 60 * hourly_rate`. No database changes needed.
 
 ---
 
 ## Version History
 | Version | Date | Notes |
 |---------|------|-------|
-| v1.0 | May 2026 | Initial release |
-
-### v1.0 Features
-- PIN login with change-PIN and admin reset
-- Up to 3 shifts per day, overnight shifts, 15-minute rounding per shift
-- Dashboard: today / last day worked / week / month / year totals
-- Log screen with live duration preview
-- Entries screen — browse by month, edit or delete any entry
-- Reports — week, month, year with PDF export
-- Admin: user management with UK address format
-- Admin: consolidated reports by user or all staff with PDF export
-- Traffic light connectivity indicator
-- Refresh and exit buttons
-- Back arrow navigation
-- Online-only — full offline blocker
-- PWA installable on Android and iOS
+| v1.0 | May 2026 | Initial release — Supabase |
+| v1.1 | May 2026 | Migrated to Firebase Firestore, renamed to TimeShift |

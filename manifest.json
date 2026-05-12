@@ -1,6 +1,6 @@
 {
-  "name": "ShiftLog",
-  "short_name": "ShiftLog",
+  "name": "TimeShift",
+  "short_name": "TimeShift",
   "description": "Staff shift time tracker",
   "start_url": "./",
   "display": "standalone",
