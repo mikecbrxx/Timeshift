@@ -490,7 +490,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '2.0';
+const APP_VERSION = '2.1';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -900,7 +900,7 @@ function renderPin() {
     <div class="pin-dots">${dots}</div>
     <div class="pin-error">${state.pinError}</div>
     <div class="pin-grid">${grid}</div>
-    ${state.pinMode === 'login' ? `<div class="pin-switch" onclick="showDemoInfo()">Demo: Admin=0000 · Staff=1234</div>` : ''}
+
   </div>`;
 }
 
@@ -1480,9 +1480,6 @@ function renderSettings() {
       <button class="btn btn-primary btn-full mt-4" onclick="saveFirebaseConfig()">
         ${icons.key} Connect to Firebase
       </button>
-      ${isConnected ? `<button class="btn btn-teal btn-full mt-4" onclick="testFirebaseWrite()">
-        ${icons.plus} Test Write to Firestore
-      </button>` : ''}
       ${saved.apiKey ? `<button class="btn btn-danger btn-full mt-4" onclick="clearFirebaseConfig()">
         ${icons.trash} Clear &amp; Return to Demo
       </button>` : ''}
@@ -1928,9 +1925,6 @@ window.doChangePin = async () => {
   closeModal();
 };
 
-window.showDemoInfo = () => {
-  showToast('Admin: 0000 · Sarah: 1234 · Emma: 5678');
-};
 
 // ═══════════════════════════════════
 // PDF EXPORT
@@ -2173,20 +2167,6 @@ window.saveFirebaseConfig = async function() {
   render();
 };
 
-window.testFirebaseWrite = async function() {
-  if (!db) { showToast('db is null — Firebase not initialised'); return; }
-  try {
-    const testId = 'test_' + Date.now();
-    await fbSetDoc(fbDoc(db, '_test', testId), { ts: new Date().toISOString(), ok: true });
-    state.fbStatus = 'Test write succeeded ✓ — Firebase is working';
-    showToast('Test write OK ✓');
-    render();
-  } catch(e) {
-    state.fbStatus = 'Test write FAILED: ' + e.message;
-    showToast('Write failed: ' + e.message);
-    render();
-  }
-};
 
 window.clearFirebaseConfig = function() {
   if (!confirm('Clear Firebase config? App will return to demo mode.')) return;
