@@ -42,6 +42,8 @@
     --font-body: 'Nunito', sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  /* Global SVG size cap — prevents unsized inline SVG icons from ballooning */
+  svg { width: 14px; height: 14px; flex-shrink: 0; }
   html, body { height: 100%; overflow: hidden; }
   body {
     font-family: var(--font-body);
@@ -53,7 +55,7 @@
   #app { height: 100%; display: flex; flex-direction: column; }
 
   /* ── SCROLLABLE CONTENT ── */
-  .screen { flex: 1; overflow-y: auto; padding: 0 0 90px; }
+  .screen { flex: 1; overflow-y: auto; padding: 0 0 72px; }
   .screen::-webkit-scrollbar { width: 4px; }
   .screen::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
@@ -61,24 +63,24 @@
   .topbar {
     background: white;
     border-bottom: 1.5px solid var(--border);
-    padding: 14px 20px;
+    padding: 8px 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     flex-shrink: 0;
     box-shadow: 0 2px 12px rgba(124,92,191,0.07);
   }
   .topbar-logo { display: flex; align-items: center; gap: 10px; }
-  .topbar-logo svg { width: 34px; height: 34px; }
-  .topbar-title { font-family: var(--font-head); font-weight: 700; font-size: 20px; color: var(--violet-dark); }
+  .topbar-logo svg { width: 26px; height: 26px; }
+  .topbar-title { font-family: var(--font-head); font-weight: 700; font-size: 15px; color: var(--violet-dark); }
   .topbar-sub { font-size: 11px; color: var(--text3); font-weight: 500; }
   .topbar-user { display: flex; align-items: center; gap: 8px; }
   .avatar {
-    width: 36px; height: 36px; border-radius: 50%;
+    width: 28px; height: 28px; border-radius: 50%;
     background: linear-gradient(135deg, var(--coral), var(--violet));
     display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 700; font-size: 13px;
+    color: white; font-weight: 700; font-size: 10px;
     font-family: var(--font-head);
     cursor: pointer; flex-shrink: 0;
   }
@@ -122,14 +124,14 @@
   /* ── TOPBAR ACTIONS ── */
   .topbar-actions { display: flex; align-items: center; gap: 6px; }
   .topbar-btn {
-    width: 32px; height: 32px; border-radius: 10px;
+    width: 26px; height: 26px; border-radius: 7px;
     background: var(--bg2); border: 1.5px solid var(--border);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; color: var(--text2); flex-shrink: 0;
     transition: background 0.15s, color 0.15s;
   }
   .topbar-btn:hover { background: var(--border); color: var(--text); }
-  .topbar-btn svg { width: 16px; height: 16px; }
+  .topbar-btn svg { width: 13px; height: 13px; }
   .topbar-btn.back { color: var(--violet); }
 
   /* ── BOTTOM NAV ── */
@@ -143,15 +145,29 @@
   }
   .nav-btn {
     flex: 1; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; padding: 10px 4px 8px;
+    justify-content: center; padding: 7px 4px 5px;
     cursor: pointer; border: none; background: none;
     color: var(--text3); transition: color 0.2s;
     font-family: var(--font-body);
-    position: relative;
+    position: relative; font-size: 9px;
   }
   .nav-btn.active { color: var(--coral); }
-  .nav-btn svg { width: 22px; height: 22px; margin-bottom: 3px; }
-  .nav-btn span { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
+  .nav-btn svg { width: 17px; height: 17px; margin-bottom: 2px; }
+  .topbar-logo svg { width: 26px !important; height: 26px !important; }
+  .topbar-btn svg { width: 13px !important; height: 13px !important; }
+  .empty svg { width: 36px !important; height: 36px !important; }
+  .pin-logo svg { width: 64px !important; height: 64px !important; }
+  .offline-screen svg.logo { width: 64px !important; height: 64px !important; }
+  .modal-close svg { width: 14px !important; height: 14px !important; }
+  .profile-menu-item svg { width: 14px !important; height: 14px !important; }
+  .user-card-info svg { width: 12px !important; height: 12px !important; }
+  .btn svg { width: 12px !important; height: 12px !important; }
+  .btn-sm svg { width: 11px !important; height: 11px !important; }
+  .stat-card svg { width: 12px !important; height: 12px !important; }
+  .entry-item svg { width: 12px !important; height: 12px !important; }
+  .tl-dot { flex-shrink: 0; }
+  svg.logo-svg { width: auto !important; height: auto !important; }
+  .nav-btn span { font-size: 9px; font-weight: 600; letter-spacing: 0.3px; }
   .nav-btn.active::after {
     content: '';
     position: absolute; top: 0; left: 20%; right: 20%;
@@ -162,29 +178,29 @@
   .card {
     background: var(--card); border-radius: var(--radius);
     box-shadow: var(--shadow); border: 1.5px solid var(--border);
-    padding: 18px;
+    padding: 12px 14px;
   }
-  .card-sm { padding: 14px 16px; border-radius: var(--radius-sm); }
+  .card-sm { padding: 8px 12px; border-radius: var(--radius-sm); }
 
   /* ── SECTION HEADER ── */
   .section-head {
-    padding: 20px 20px 10px;
+    padding: 10px 14px 6px;
     display: flex; align-items: center; justify-content: space-between;
   }
   .section-head h2 {
-    font-family: var(--font-head); font-weight: 700; font-size: 18px; color: var(--text);
+    font-family: var(--font-head); font-weight: 700; font-size: 14px; color: var(--text);
   }
-  .section-head .sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .section-head .sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
 
   /* ── STAT CARDS ── */
-  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 20px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px; }
   .stat-card {
-    border-radius: var(--radius); padding: 16px;
+    border-radius: var(--radius-sm); padding: 10px 12px;
     position: relative; overflow: hidden;
   }
-  .stat-card .label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 6px; }
-  .stat-card .value { font-family: var(--font-head); font-weight: 800; font-size: 22px; line-height: 1; }
-  .stat-card .sub-val { font-size: 11px; margin-top: 4px; opacity: 0.7; }
+  .stat-card .label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 3px; }
+  .stat-card .value { font-family: var(--font-head); font-weight: 800; font-size: 16px; line-height: 1; }
+  .stat-card .sub-val { font-size: 9px; margin-top: 3px; opacity: 0.7; }
   .stat-card .blob {
     position: absolute; right: -10px; bottom: -10px;
     width: 60px; height: 60px; border-radius: 50%;
@@ -198,10 +214,10 @@
 
   /* ── TODAY HERO ── */
   .today-hero {
-    margin: 20px 20px 0;
+    margin: 8px 14px 0;
     background: linear-gradient(135deg, var(--violet-dark) 0%, var(--coral) 100%);
-    border-radius: var(--radius);
-    padding: 22px 20px;
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
     color: white;
     position: relative;
     overflow: hidden;
@@ -220,15 +236,15 @@
     background: rgba(255,255,255,0.06);
     border-radius: 50%;
   }
-  .today-hero .date-label { font-size: 12px; font-weight: 600; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
-  .today-hero .hours-big { font-family: var(--font-head); font-weight: 800; font-size: 48px; line-height: 1; margin: 6px 0 4px; }
-  .today-hero .shifts-label { font-size: 12px; opacity: 0.75; }
+  .today-hero .date-label { font-size: 10px; font-weight: 600; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+  .today-hero .hours-big { font-family: var(--font-head); font-weight: 800; font-size: 32px; line-height: 1; margin: 3px 0 2px; }
+  .today-hero .shifts-label { font-size: 10px; opacity: 0.75; }
 
   /* ── BUTTONS ── */
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-    padding: 11px 20px; border-radius: 50px; border: none; cursor: pointer;
-    font-family: var(--font-body); font-weight: 700; font-size: 14px;
+    padding: 8px 14px; border-radius: 50px; border: none; cursor: pointer;
+    font-family: var(--font-body); font-weight: 700; font-size: 12px;
     transition: all 0.18s; text-decoration: none;
   }
   .btn-primary { background: linear-gradient(135deg, var(--coral), var(--coral-dark)); color: white; box-shadow: 0 4px 16px rgba(255,107,138,0.35); }
@@ -237,23 +253,23 @@
   .btn-violet { background: linear-gradient(135deg, var(--violet), var(--violet-dark)); color: white; box-shadow: 0 4px 16px rgba(124,92,191,0.30); }
   .btn-teal { background: linear-gradient(135deg, var(--teal), #0099A8); color: white; }
   .btn-danger { background: #FFE8EE; color: #D63360; border: 1.5px solid #FFCCD8; }
-  .btn-sm { padding: 7px 14px; font-size: 12px; }
-  .btn-icon { padding: 9px; border-radius: 12px; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+  .btn-icon { padding: 6px; border-radius: 8px; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   .btn-full { width: 100%; }
 
   /* ── FORMS ── */
-  .form-group { margin-bottom: 16px; }
-  .form-group label { display: block; font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .form-group { margin-bottom: 8px; }
+  .form-group label { display: block; font-size: 10px; font-weight: 700; color: var(--text2); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.4px; }
   .form-group input, .form-group select {
-    width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
+    width: 100%; padding: 7px 10px; border-radius: var(--radius-sm);
     border: 1.5px solid var(--border); background: var(--bg);
-    font-family: var(--font-body); font-size: 15px; color: var(--text);
+    font-family: var(--font-body); font-size: 13px; color: var(--text);
     outline: none; transition: border-color 0.18s;
   }
   .form-group input:focus, .form-group select:focus { border-color: var(--violet-light); background: white; }
   .form-group .hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
   /* ── MODAL ── */
   .modal-overlay {
@@ -267,12 +283,12 @@
   .modal {
     background: white; width: 100%; max-width: 480px;
     border-radius: 24px 24px 0 0;
-    padding: 24px 20px 32px;
+    padding: 16px 16px 24px;
     animation: slideUp 0.22s ease;
     max-height: 92vh; overflow-y: auto;
   }
-  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-  .modal-title { font-family: var(--font-head); font-weight: 700; font-size: 18px; color: var(--text); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .modal-title { font-family: var(--font-head); font-weight: 700; font-size: 14px; color: var(--text); }
   .modal-close { width: 32px; height: 32px; border-radius: 50%; background: var(--bg2); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 18px; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -312,10 +328,10 @@
   /* ── SHIFT ENTRY ── */
   .shift-row {
     background: var(--bg); border-radius: var(--radius-sm);
-    padding: 12px 14px; margin-bottom: 10px;
+    padding: 7px 10px; margin-bottom: 6px;
     border: 1.5px solid var(--border);
   }
-  .shift-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .shift-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
   .shift-badge {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 3px 10px; border-radius: 20px;
@@ -324,21 +340,21 @@
   .badge-1 { background: #FFE8EE; color: #D63360; }
   .badge-2 { background: #EDE6FF; color: #5E3FA3; }
   .badge-3 { background: #E0F7FA; color: #006064; }
-  .shift-duration { font-family: var(--font-head); font-weight: 700; font-size: 15px; color: var(--violet); }
+  .shift-duration { font-family: var(--font-head); font-weight: 700; font-size: 12px; color: var(--violet); }
 
   /* ── ENTRY LIST ── */
   .entry-item {
-    padding: 14px 16px; border-radius: var(--radius-sm);
+    padding: 8px 10px; border-radius: var(--radius-sm);
     background: white; border: 1.5px solid var(--border);
-    margin-bottom: 10px; cursor: pointer;
+    margin-bottom: 6px; cursor: pointer;
     transition: box-shadow 0.15s, border-color 0.15s;
   }
   .entry-item:hover { box-shadow: var(--shadow); border-color: var(--violet-light); }
-  .entry-item-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .entry-date { font-weight: 700; font-size: 14px; color: var(--text); }
-  .entry-total { font-family: var(--font-head); font-weight: 800; font-size: 16px; color: var(--coral); }
-  .entry-shifts { font-size: 12px; color: var(--text3); }
-  .entry-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .entry-item-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+  .entry-date { font-weight: 700; font-size: 12px; color: var(--text); }
+  .entry-total { font-family: var(--font-head); font-weight: 800; font-size: 13px; color: var(--coral); }
+  .entry-shifts { font-size: 10px; color: var(--text3); }
+  .entry-actions { display: flex; gap: 6px; margin-top: 6px; }
 
   /* ── REPORT ── */
   .report-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 20px 16px; }
@@ -352,17 +368,17 @@
     box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px;
     overflow: hidden; position: relative;
   }
-  .user-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .user-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .user-card-avatar {
-    width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+    width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-head); font-weight: 800; font-size: 17px; color: white;
+    font-family: var(--font-head); font-weight: 800; font-size: 13px; color: white;
   }
-  .user-card-name { font-weight: 700; font-size: 15px; color: var(--text); }
+  .user-card-name { font-weight: 700; font-size: 13px; color: var(--text); }
   .user-card-role { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; display: inline-block; margin-top: 2px; }
   .role-admin { background: #EDE6FF; color: var(--violet-dark); }
   .role-user { background: #FFE8EE; color: var(--coral-dark); }
-  .user-card-info { font-size: 12px; color: var(--text2); line-height: 1.8; }
+  .user-card-info { font-size: 11px; color: var(--text2); line-height: 1.6; }
   .user-card-info span { display: flex; align-items: center; gap: 5px; }
 
   /* ── TOAST ── */
@@ -375,10 +391,10 @@
   }
 
   /* ── TABS ── */
-  .tab-row { display: flex; gap: 8px; padding: 0 20px 16px; overflow-x: auto; }
+  .tab-row { display: flex; gap: 6px; padding: 0 14px 10px; overflow-x: auto; }
   .tab-row::-webkit-scrollbar { display: none; }
   .tab-pill {
-    padding: 7px 16px; border-radius: 50px; font-size: 13px; font-weight: 700;
+    padding: 5px 12px; border-radius: 50px; font-size: 11px; font-weight: 700;
     border: 1.5px solid var(--border); background: white; color: var(--text2);
     cursor: pointer; white-space: nowrap; transition: all 0.15s;
   }
@@ -388,8 +404,8 @@
   .divider { height: 1px; background: var(--border); margin: 16px 0; }
 
   /* ── EMPTY ── */
-  .empty { text-align: center; padding: 48px 20px; color: var(--text3); }
-  .empty svg { width: 56px; height: 56px; margin-bottom: 14px; opacity: 0.4; }
+  .empty { text-align: center; padding: 24px 14px; color: var(--text3); }
+  .empty svg { width: 36px; height: 36px; margin-bottom: 8px; opacity: 0.4; }
   .empty p { font-size: 14px; }
 
   /* ── CHIP ── */
@@ -399,9 +415,9 @@
   .chip-amber { background: #FFF4E5; color: #A05A00; }
 
   /* ── MISC ── */
-  .page-pad { padding: 0 20px; }
-  .mt-4 { margin-top: 16px; }
-  .mb-4 { margin-bottom: 16px; }
+  .page-pad { padding: 0 14px; }
+  .mt-4 { margin-top: 10px; }
+  .mb-4 { margin-bottom: 10px; }
   .flex-row { display: flex; align-items: center; gap: 10px; }
   .flex-between { display: flex; align-items: center; justify-content: space-between; }
   .text-sm { font-size: 13px; }
@@ -416,14 +432,14 @@
 
   /* ── PROFILE MENU ── */
   .profile-menu {
-    position: fixed; top: 60px; right: 16px;
+    position: fixed; top: 48px; right: 12px;
     background: white; border-radius: 16px; border: 1.5px solid var(--border);
     box-shadow: var(--shadow-lg); z-index: 150; min-width: 180px;
     overflow: hidden; animation: fadeIn 0.15s ease;
   }
   .profile-menu-item {
-    padding: 12px 16px; display: flex; align-items: center; gap: 10px;
-    cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text);
+    padding: 9px 14px; display: flex; align-items: center; gap: 8px;
+    cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text);
     transition: background 0.12s;
   }
   .profile-menu-item:hover { background: var(--bg2); }
@@ -469,7 +485,7 @@ const DEMO_MODE = true;
 // STATE
 // ═══════════════════════════════════
 let state = {
-  screen: 'pin',        // pin | home | log | entries | reports | users | profile | admin-reports
+  screen: 'pin',        // pin | home | log | entries | reports | users | admin-reports | settings
   online: null,         // null=checking, true=online, false=offline
   currentUser: null,
   users: [],
@@ -686,7 +702,7 @@ function logout() {
 // LOGO SVG
 // ═══════════════════════════════════
 function logoSVG(size = 40) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  return `<svg class="logo-svg" width="${size}" height="${size}" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect width="40" height="40" rx="12" fill="url(#lg1)"/>
     <circle cx="20" cy="20" r="11" stroke="white" stroke-width="2.5" fill="none" opacity="0.9"/>
     <line x1="20" y1="9" x2="20" y2="20" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
@@ -726,6 +742,7 @@ const icons = {
   chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>`,
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
   exit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
 };
 
@@ -741,7 +758,7 @@ function renderNav() {
   const u = state.currentUser;
   if (!u) return '';
   const adminExtra = u.role === 'admin'
-    ? navBtn('users', 'users', 'Users') + navBtn('admin-reports', 'eye', 'Admin')
+    ? navBtn('users', 'users', 'Users') + navBtn('admin-reports', 'eye', 'Admin') + navBtn('settings', 'key', 'Config')
     : '';
   return `<div class="bottom-nav">
     ${navBtn('home','home','Home')}
@@ -760,7 +777,7 @@ function renderTopbar() {
   return `<div class="topbar">
     <div class="topbar-logo">
       ${showBack ? `<div class="topbar-btn back" onclick="nav('home')" title="Back to Home">${icons.chevronLeft}</div>` : ''}
-      ${logoSVG(34)}
+      ${logoSVG(26)}
       <div>
         <div class="topbar-title">ShiftLog</div>
       </div>
@@ -832,12 +849,12 @@ function renderHome() {
       <div class="hours-big">${formatMins(stats.todayMins)}</div>
       <div class="shifts-label">${shiftCount === 0 ? 'No shifts logged today' : `${shiftCount} shift${shiftCount > 1 ? 's' : ''} logged`}</div>
     </div>
-    <div style="padding:16px 20px 0;">
+    <div style="padding:6px 14px 0;">
       <button class="btn btn-primary btn-full" onclick="nav('log')">
         ${icons.plus} Log Shift
       </button>
     </div>
-    <div class="section-head" style="margin-top:8px;">
+    <div class="section-head" style="margin-top:4px;">
       <h2>Your Overview</h2>
     </div>
     <div class="stat-grid">
@@ -925,7 +942,7 @@ function renderLog() {
       ${totalMins > 0 ? `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#F0EBFF,#FFE8EE);border-color:var(--violet-light)">
         <div class="flex-between">
           <span style="font-weight:700;color:var(--text2);">Total for day</span>
-          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(totalMins)}</span>
+          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(totalMins)}</span>
         </div>
         <div class="text-xs text-muted mt-1">Rounded to nearest 15 mins per shift</div>
       </div>` : ''}
@@ -999,14 +1016,14 @@ function renderEntries() {
     </div>
     <div class="flex-between page-pad mb-4">
       <button class="btn btn-secondary btn-icon btn-sm" onclick="setEntriesMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
-      <div style="font-weight:700;font-size:15px;">${MONTH_NAMES[month]} ${year}</div>
+      <div style="font-weight:700;font-size:13px;">${MONTH_NAMES[month]} ${year}</div>
       <button class="btn btn-secondary btn-icon btn-sm" ${isThisMonthOrFuture ? 'disabled' : ''} onclick="setEntriesMonth(${next.m},${next.y})">${icons.chevronRight}</button>
     </div>
     ${totalMins > 0 ? `<div class="page-pad mb-4">
       <div class="card card-sm" style="background:linear-gradient(135deg,#F0EBFF,#FFE8EE);border-color:var(--violet-light);">
         <div class="flex-between">
           <span class="fw-700 text-muted text-sm">Month Total</span>
-          <span class="fw-800 text-violet" style="font-size:18px;">${formatMins(totalMins)}</span>
+          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(totalMins)}</span>
         </div>
         <div class="text-xs text-muted mt-1">${monthEntries.length} day${monthEntries.length !== 1 ? 's' : ''} worked</div>
       </div>
@@ -1036,7 +1053,7 @@ function renderReports() {
       <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">
         <div class="flex-between">
           <span class="fw-700" style="color:#00696F;">Week Total</span>
-          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(total)}</span>
+          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
         </div>
         <div class="text-xs text-muted mt-1">${days.length} days worked · ${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
       </div>
@@ -1068,13 +1085,13 @@ function renderReports() {
     return `<div class="page-pad">
       <div class="flex-between mb-4">
         <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
-        <span class="fw-700" style="font-size:15px;">${MONTH_NAMES[m]} ${y}</span>
+        <span class="fw-700" style="font-size:13px;">${MONTH_NAMES[m]} ${y}</span>
         <button class="btn btn-secondary btn-icon btn-sm" ${isCurrentOrFuture?'disabled':''} onclick="setReportMonth(${next.m},${next.y})">${icons.chevronRight}</button>
       </div>
       <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF0F3,#F0EBFF);border-color:var(--coral-light);">
         <div class="flex-between">
           <span class="fw-700" style="color:var(--coral-dark);">Month Total</span>
-          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(total)}</span>
+          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
         </div>
         <div class="text-xs text-muted mt-1">${entries.length} days worked</div>
       </div>
@@ -1104,13 +1121,13 @@ function renderReports() {
     return `<div class="page-pad">
       <div class="flex-between mb-4">
         <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportYear(${y-1})">${icons.chevronLeft}</button>
-        <span class="fw-700" style="font-size:15px;">${y}</span>
+        <span class="fw-700" style="font-size:13px;">${y}</span>
         <button class="btn btn-secondary btn-icon btn-sm" ${y >= now.getFullYear() ? 'disabled' : ''} onclick="setReportYear(${y+1})">${icons.chevronRight}</button>
       </div>
       <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF4E5,#FFE8EE);border-color:var(--amber);">
         <div class="flex-between">
           <span class="fw-700" style="color:#A05A00;">Year Total</span>
-          <span class="fw-800 text-violet" style="font-size:20px;">${formatMins(total)}</span>
+          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
         </div>
         <div class="text-xs text-muted mt-1">${entries.length} days worked in ${y}</div>
       </div>
@@ -1197,13 +1214,13 @@ function renderAdminReports() {
       </div>
       <div class="flex-between mb-4">
         <button class="btn btn-secondary btn-icon btn-sm" onclick="setAdminMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
-        <span class="fw-700" style="font-size:15px;">${MONTH_NAMES[m]} ${y}</span>
+        <span class="fw-700" style="font-size:13px;">${MONTH_NAMES[m]} ${y}</span>
         <button class="btn btn-secondary btn-icon btn-sm" ${isFuture?'disabled':''} onclick="setAdminMonth(${next.m},${next.y})">${icons.chevronRight}</button>
       </div>
       <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#EDE6FF,#FFE8EE);border-color:var(--violet-light);">
         <div class="flex-between">
           <span class="fw-700 text-violet">Total Hours</span>
-          <span class="fw-800" style="font-size:20px;color:var(--coral-dark);">${formatMins(gt)}</span>
+          <span class="fw-800" style="font-size:14px;color:var(--coral-dark);">${formatMins(gt)}</span>
         </div>
         <div class="text-xs text-muted mt-1">${allEntries.length} entries · ${targetUid === 'all' ? 'All users' : usersToShow[0]?.name}</div>
       </div>
@@ -1230,7 +1247,7 @@ function renderUsers() {
         <span>${icons.mail} ${u.email || '—'}</span>
         <span>${icons.map} ${[u.address, u.city, u.postcode].filter(Boolean).join(', ') || '—'}</span>
       </div>
-      <div class="entry-actions mt-4">
+      <div class="entry-actions" style="margin-top:6px;">
         <button class="btn btn-secondary btn-sm" onclick="editUser('${u.id}')">${icons.edit} Edit</button>
         <button class="btn btn-secondary btn-sm" onclick="adminResetPin('${u.id}')">${icons.key} Reset PIN</button>
         ${u.id !== state.currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="removeUser('${u.id}')">${icons.trash}</button>` : ''}
@@ -1243,6 +1260,55 @@ function renderUsers() {
       <button class="btn btn-primary btn-sm" onclick="openAddUser()">${icons.plus} Add User</button>
     </div>
     <div class="page-pad">${cards}</div>
+    <div style="height:20px;"></div>`;
+}
+
+// ═══════════════════════════════════
+// SETTINGS (Admin — Supabase Config)
+// ═══════════════════════════════════
+function renderSettings() {
+  const saved = JSON.parse(localStorage.getItem('sl_supabase') || '{}');
+  const url = saved.url || '';
+  const key = saved.key || '';
+  const isConnected = !!(url && key);
+  return `
+    <div class="section-head">
+      <div><h2>Database Config</h2><div class="sub">Supabase connection settings</div></div>
+    </div>
+    <div class="page-pad">
+      <div class="card card-sm mb-4" style="background:${isConnected ? 'linear-gradient(135deg,#E6F9EF,#E0F7FA)' : 'linear-gradient(135deg,#FFF4E5,#FFE8EE)'}; border-color:${isConnected ? '#52C97E' : 'var(--amber)'};">
+        <div class="flex-between">
+          <span class="fw-700" style="font-size:12px;color:${isConnected ? '#1A7A42' : '#A05A00'};">${isConnected ? '✓ Supabase configured' : '⚠ Not configured — running in demo mode'}</span>
+          ${isConnected ? `<span class="chip chip-green">Live</span>` : `<span class="chip chip-amber">Demo</span>`}
+        </div>
+        ${isConnected ? `<div class="text-xs text-muted mt-1">${url}</div>` : ''}
+      </div>
+      <div class="form-group">
+        <label>Supabase Project URL</label>
+        <input type="url" id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co" value="${url}"/>
+        <div class="hint">Found in your Supabase project → Settings → API</div>
+      </div>
+      <div class="form-group">
+        <label>Anon / Public Key</label>
+        <input type="text" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." value="${key}"/>
+        <div class="hint">Use the anon/public key only — never the service role key</div>
+      </div>
+      <button class="btn btn-primary btn-full mt-4" onclick="saveSupabaseConfig()">
+        ${icons.key} Save Configuration
+      </button>
+      ${isConnected ? `<button class="btn btn-danger btn-full mt-4" onclick="clearSupabaseConfig()">
+        ${icons.trash} Clear Configuration
+      </button>` : ''}
+      <div class="card card-sm mt-4" style="background:var(--bg2);">
+        <div class="fw-700 text-sm mb-4" style="margin-bottom:6px;">Where to find your keys</div>
+        <div class="text-xs text-muted" style="line-height:1.8;">
+          1. Go to <strong>supabase.com</strong> and open your project<br/>
+          2. Click <strong>Settings</strong> (gear icon) → <strong>API</strong><br/>
+          3. Copy the <strong>Project URL</strong> and <strong>anon public</strong> key<br/>
+          4. Paste them above and tap Save
+        </div>
+      </div>
+    </div>
     <div style="height:20px;"></div>`;
 }
 
@@ -1761,6 +1827,7 @@ function render() {
     case 'reports': screenContent = renderReports(); break;
     case 'users': screenContent = renderUsers(); break;
     case 'admin-reports': screenContent = renderAdminReports(); break;
+    case 'settings': screenContent = renderSettings(); break;
     default: screenContent = renderHome();
   }
 
@@ -1773,6 +1840,27 @@ function render() {
     ${state.toast ? `<div class="toast">${state.toast}</div>` : ''}
   `;
 }
+
+// ═══════════════════════════════════
+// SUPABASE CONFIG ACTIONS
+// ═══════════════════════════════════
+window.saveSupabaseConfig = function() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { showToast('Both fields are required'); return; }
+  if (!url.startsWith('https://')) { showToast('URL must start with https://'); return; }
+  if (!key.startsWith('eyJ')) { showToast('Key looks incorrect — check and retry'); return; }
+  localStorage.setItem('sl_supabase', JSON.stringify({ url, key }));
+  showToast('Configuration saved — reload to apply');
+  render();
+};
+
+window.clearSupabaseConfig = function() {
+  if (!confirm('Clear Supabase configuration? App will return to demo mode.')) return;
+  localStorage.removeItem('sl_supabase');
+  showToast('Configuration cleared');
+  render();
+};
 
 // ═══════════════════════════════════
 // CONNECTIVITY
