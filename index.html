@@ -498,10 +498,7 @@ async function initFirebase() {
     const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
     const fs = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
 
-    fbApp = getApps().length ? getApps()[0] : initializeApp(cfg);
-    db = getFirestore(fbApp);
-
-    // Store Firestore helpers at module level — avoids window._fb scoping issues
+    // Assign all Firestore helpers FIRST before using any of them
     fbCollection = fs.collection;
     fbDoc        = fs.doc;
     fbGetDocs    = fs.getDocs;
@@ -509,15 +506,16 @@ async function initFirebase() {
     fbUpdateDoc  = fs.updateDoc;
     fbDeleteDoc  = fs.deleteDoc;
 
-    // Keep getFirestore accessible
-    function getFirestore(app) { return fs.getFirestore(app); }
+    // Now safe to use fs.getFirestore
+    fbApp = getApps().length ? getApps()[0] : initializeApp(cfg);
+    db    = fs.getFirestore(fbApp);
 
     DEMO_MODE = false;
-    console.log('Firebase initialised OK, db:', db);
+    state.fbStatus = 'Connected to Firebase ✓';
   } catch(e) {
-    console.error('Firebase init failed:', e);
     DEMO_MODE = true;
-    showToast('Firebase connection failed — demo mode');
+    state.fbStatus = 'Firebase error: ' + e.message;
+    showToast('Firebase error: ' + e.message);
   }
 }
 
@@ -549,6 +547,7 @@ let state = {
   adminReportMonth: new Date().getMonth(),
   adminReportYear: new Date().getFullYear(),
   loading: false,
+  fbStatus: '',
 };
 
 // ═══════════════════════════════════
@@ -1326,6 +1325,8 @@ function renderSettings() {
           ${isConnected ? `<span class="chip chip-green">Live</span>` : `<span class="chip chip-amber">Demo</span>`}
         </div>
         ${isConnected ? `<div class="text-xs text-muted mt-1">Project: ${projectId}</div>` : ''}
+        ${state.fbStatus ? `<div class="text-xs mt-1" style="color:${state.fbStatus.includes('error') || state.fbStatus.includes('Error') ? '#D63360' : '#1A7A42'};word-break:break-all;">${state.fbStatus}</div>` : ''}
+        <div class="text-xs text-muted mt-1">db object: ${db ? 'OK ✓' : 'NULL ✗'} · DEMO_MODE: ${DEMO_MODE}</div>
       </div>
       <div class="form-group">
         <label>API Key</label>
@@ -1345,6 +1346,9 @@ function renderSettings() {
       <button class="btn btn-primary btn-full mt-4" onclick="saveFirebaseConfig()">
         ${icons.key} Connect to Firebase
       </button>
+      ${isConnected ? `<button class="btn btn-teal btn-full mt-4" onclick="testFirebaseWrite()">
+        ${icons.plus} Test Write to Firestore
+      </button>` : ''}
       ${saved.apiKey ? `<button class="btn btn-danger btn-full mt-4" onclick="clearFirebaseConfig()">
         ${icons.trash} Clear &amp; Return to Demo
       </button>` : ''}
@@ -1985,6 +1989,21 @@ window.saveFirebaseConfig = async function() {
     showToast('Connection failed — check keys and retry');
   }
   render();
+};
+
+window.testFirebaseWrite = async function() {
+  if (!db) { showToast('db is null — Firebase not initialised'); return; }
+  try {
+    const testId = 'test_' + Date.now();
+    await fbSetDoc(fbDoc(db, '_test', testId), { ts: new Date().toISOString(), ok: true });
+    state.fbStatus = 'Test write succeeded ✓ — Firebase is working';
+    showToast('Test write OK ✓');
+    render();
+  } catch(e) {
+    state.fbStatus = 'Test write FAILED: ' + e.message;
+    showToast('Write failed: ' + e.message);
+    render();
+  }
 };
 
 window.clearFirebaseConfig = function() {
