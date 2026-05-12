@@ -477,7 +477,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -731,7 +731,9 @@ function tryLogin(pin) {
     if (user.role === 'admin') setTimeout(checkBackupReminder, 1500);
     // Reload all data fresh from Firebase on every login
     if (!DEMO_MODE && db) {
-      loadFirebaseData().then(() => render());
+      loadFirebaseData().then(() => {
+        render();
+      }).catch(e => console.error('Login reload failed:', e));
     }
     state.screen = 'home';
     state.pinInput = '';
@@ -2200,7 +2202,6 @@ async function loadFirebaseData() {
   // This ensures all users always see up-to-date data.
   if (!db) return;
   try {
-    state.loading = true; render();
     const [uSnap, eSnap, aSnap] = await Promise.all([
       fbGetDocs(fbCollection(db, 'users')),
       fbGetDocs(fbCollection(db, 'entries')),
@@ -2350,11 +2351,14 @@ window.checkOnline = function() {
 };
 
 window.refreshApp = async function() {
-  checkOnline();
   if (!DEMO_MODE && db) {
+    state.loading = true; render();
     await loadFirebaseData();
+    state.loading = false;
+    checkOnline();
     showToast('Data refreshed from Firebase');
   } else {
+    checkOnline();
     showToast('Refreshed');
   }
   render();
@@ -2373,13 +2377,23 @@ window.addEventListener('offline', () => { state.online = false; render(); });
 // INIT
 // ═══════════════════════════════════
 async function init() {
-  await initFirebase();    // attempt Firebase connection
+  // Show loading screen immediately
+  state.loading = true;
+  render();
+
+  // Connect to Firebase
+  await initFirebase();
+
   if (!DEMO_MODE && db) {
-    await loadFirebaseData(); // load all live data from Firebase
+    await loadFirebaseData();  // loads users, entries, audit from Firestore
   } else {
-    initDemoData();        // only use demo data if Firebase not configured
+    initDemoData();            // no Firebase config — use demo data
   }
-  checkOnline();           // sets state.online then calls render()
+
+  state.loading = false;
+
+  // Now check connectivity and show PIN screen
+  checkOnline();
 }
 init();
 </script>
