@@ -490,7 +490,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '2.3';
+const APP_VERSION = '2.4';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -2236,6 +2236,7 @@ window.exportBackup = function() {
   a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
   state.lastBackupDate = now.toISOString();
+  saveBackupPrefs();
   auditLog('BACKUP_EXPORT', `Backup exported: ${filename}`);
   showToast('Backup exported ✓');
   render();
@@ -2257,7 +2258,7 @@ window.restoreBackup = async function() {
       state.users    = restored.users    || [];
       state.entries  = restored.entries  || [];
       state.auditLog = restored.auditLog || [];
-      state.backupReminderDays = restored.backupReminderDays || 7;
+      state.backupReminderDays = (restored.backupReminderDays !== undefined) ? restored.backupReminderDays : 7;
 
       // Write everything back to Firestore
       if (!DEMO_MODE && db) {
@@ -2279,14 +2280,31 @@ window.restoreBackup = async function() {
 };
 
 window.saveBackupSettings = function() {
-  const days = parseInt(document.getElementById('backup-days').value) || 7;
-  state.backupReminderDays = days;
-  showToast(`Reminder set to every ${days} days`);
+  const raw = document.getElementById('backup-days').value;
+  const days = raw === '' ? 7 : parseInt(raw);
+  state.backupReminderDays = isNaN(days) ? 7 : days;
+  saveBackupPrefs();
+  showToast(days === 0 ? 'Backup reminder disabled' : `Reminder set to every ${days} days`);
   render();
 };
 
+function saveBackupPrefs() {
+  localStorage.setItem('ts_backup_prefs', JSON.stringify({
+    lastBackupDate: state.lastBackupDate,
+    backupReminderDays: state.backupReminderDays
+  }));
+}
+
+function loadBackupPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('ts_backup_prefs') || '{}');
+    if (saved.lastBackupDate) state.lastBackupDate = saved.lastBackupDate;
+    if (saved.backupReminderDays !== undefined) state.backupReminderDays = saved.backupReminderDays;
+  } catch(e) {}
+}
+
 function checkBackupReminder() {
-  if (!state.backupReminderDays || state.backupReminderDays === 0) return;
+  if (state.backupReminderDays === 0) return;  // disabled
   if (!state.lastBackupDate) {
     // Never backed up
     setTimeout(() => {
@@ -2354,6 +2372,7 @@ async function init() {
   }
 
   state.loading = false;
+  loadBackupPrefs();  // restore backup date and reminder days
 
   // Remove static boot screen and show the real app
   const boot = document.getElementById('boot-screen');
