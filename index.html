@@ -490,7 +490,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '2.4';
+const APP_VERSION = '2.5';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -564,6 +564,8 @@ let state = {
   adminReportUser: 'all',
   adminReportMonth: new Date().getMonth(),
   adminReportYear: new Date().getFullYear(),
+  adminReportTab: 'month',
+  adminSelectedUsers: [],  // empty = all users
   loading: false,
   fbStatus: '',
   auditLog: [],
@@ -1243,69 +1245,132 @@ function renderReports() {
 function renderAdminReports() {
   const now = new Date();
   const m = state.adminReportMonth, y = state.adminReportYear;
-  const targetUid = state.adminReportUser;
-
+  const tab = state.adminReportTab || 'month';
   const allUsers = state.users.filter(u => u.active);
-  const filterEntries = (uid) => state.entries.filter(e => {
-    if (uid !== 'all' && e.user_id !== uid) return false;
-    const d = parseDate(e.date);
-    return d.getMonth() === m && d.getFullYear() === y;
-  });
 
-  const userOptions = [`<option value="all">All Users</option>`,
-    ...allUsers.map(u => `<option value="${u.id}" ${targetUid===u.id?'selected':''}>${u.name}</option>`)
-  ].join('');
+  // If nothing selected yet, default to all users
+  const sel = state.adminSelectedUsers.length > 0 ? state.adminSelectedUsers : allUsers.map(u => u.id);
+  const usersToShow = allUsers.filter(u => sel.includes(u.id));
 
+  // Checkboxes
+  const checkboxes = allUsers.map(u => {
+    const checked = sel.includes(u.id) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <input type="checkbox" value="${u.id}" ${checked} onchange="toggleAdminUser('${u.id}',this.checked)"
+        style="width:16px;height:16px;accent-color:var(--violet);flex-shrink:0;"/>
+      <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;background:${u.color}">${u.initials}</div>
+      <span style="font-size:13px;font-weight:600;">${u.name}</span>
+      <span class="user-card-role ${u.role==='admin'?'role-admin':'role-user'}" style="font-size:10px;margin-left:auto;">${u.role==='admin'?'Admin':'Staff'}</span>
+    </label>`;
+  }).join('');
+
+  // Period nav
   const prev = m === 0 ? { m:11, y:y-1 } : { m:m-1, y };
   const next = m === 11 ? { m:0, y:y+1 } : { m:m+1, y };
   const isFuture = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
 
-  // Build per-user summary
-  const usersToShow = targetUid === 'all' ? allUsers : allUsers.filter(u => u.id === targetUid);
-  const summaryRows = usersToShow.map(u => {
-    const ue = filterEntries(u.id);
-    const total = sumMins(ue);
-    return `<div class="entry-item" style="cursor:default;">
-      <div class="flex-between">
-        <div class="flex-row">
-          <div class="user-card-avatar" style="width:36px;height:36px;font-size:13px;background:${u.color}">${u.initials}</div>
-          <div>
-            <div class="fw-700 text-sm">${u.name}</div>
-            <div class="text-xs text-muted">${ue.length} day${ue.length!==1?'s':''} worked</div>
-          </div>
-        </div>
-        <div class="fw-800 text-coral">${formatMins(total)}</div>
-      </div>
-    </div>`;
-  }).join('');
+  // Build summary rows
+  let summaryRows = '', grandTotal = 0;
 
-  const grandTotal = sumMins(filterEntries(targetUid === 'all' ? undefined : targetUid).filter(e =>
-    targetUid === 'all' || e.user_id === targetUid
-  ));
-  // Recalculate for all
-  const allEntries = targetUid === 'all'
-    ? state.entries.filter(e => { const d=parseDate(e.date); return d.getMonth()===m && d.getFullYear()===y; })
-    : filterEntries(targetUid);
-  const gt = sumMins(allEntries);
+  if (tab === 'month') {
+    usersToShow.forEach(u => {
+      const ue = state.entries.filter(e => {
+        if (e.user_id !== u.id) return false;
+        const d = parseDate(e.date);
+        return d.getMonth() === m && d.getFullYear() === y;
+      }).sort((a,b) => a.date.localeCompare(b.date));
+      const total = sumMins(ue);
+      grandTotal += total;
+      if (!ue.length) {
+        summaryRows += `<div class="entry-item" style="cursor:default;opacity:0.5;">
+          <div class="flex-between">
+            <div class="flex-row">
+              <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
+              <span class="fw-700 text-sm">${u.name}</span>
+            </div>
+            <span class="text-xs text-muted">No entries</span>
+          </div>
+        </div>`;
+        return;
+      }
+      summaryRows += `<div style="margin-bottom:10px;">
+        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;">
+          <div class="flex-row">
+            <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
+            <span class="fw-700 text-sm">${u.name}</span>
+          </div>
+          <span class="fw-800 text-violet">${formatMins(total)}</span>
+        </div>
+        ${ue.map(e => `<div class="flex-between" style="padding:4px 6px;font-size:11px;">
+          <span style="color:var(--text2);">${displayDateShort(e.date)}</span>
+          <span style="color:var(--text3);">${e.shifts.map(s=>s.start+'–'+s.end).join(' · ')}</span>
+          <span class="fw-700 text-coral">${formatMins(e.total_mins)}</span>
+        </div>`).join('')}
+      </div>`;
+    });
+  } else {
+    // Year view — monthly breakdown per user
+    usersToShow.forEach(u => {
+      const ue = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
+      const total = sumMins(ue);
+      grandTotal += total;
+      const byMonth = Array.from({length:12}, (_,i) => {
+        const me = ue.filter(e => parseDate(e.date).getMonth() === i);
+        return { month: i, mins: sumMins(me), days: me.length };
+      }).filter(mm => mm.mins > 0);
+      summaryRows += `<div style="margin-bottom:10px;">
+        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;">
+          <div class="flex-row">
+            <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
+            <span class="fw-700 text-sm">${u.name}</span>
+          </div>
+          <span class="fw-800 text-violet">${formatMins(total)}</span>
+        </div>
+        ${byMonth.length ? byMonth.map(mm => `<div class="flex-between" style="padding:4px 6px;font-size:11px;">
+          <span style="color:var(--text2);">${MONTH_SHORT[mm.month]}</span>
+          <span style="color:var(--text3);">${mm.days} day${mm.days!==1?'s':''}</span>
+          <span class="fw-700 text-coral">${formatMins(mm.mins)}</span>
+        </div>`).join('') : '<div style="font-size:11px;color:var(--text3);padding:4px 6px;">No entries</div>'}
+      </div>`;
+    });
+  }
+
+  const periodNav = tab === 'month' ? `
+    <div class="flex-between mb-4" style="gap:6px;">
+      <button class="btn btn-secondary btn-icon btn-sm" onclick="setAdminMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
+      <span class="fw-700" style="font-size:13px;">${MONTH_NAMES[m]} ${y}</span>
+      <button class="btn btn-secondary btn-icon btn-sm" ${isFuture?'disabled':''} onclick="setAdminMonth(${next.m},${next.y})">${icons.chevronRight}</button>
+    </div>` : `
+    <div class="flex-between mb-4" style="gap:6px;">
+      <button class="btn btn-secondary btn-icon btn-sm" onclick="setAdminReportYear2(${y-1})">${icons.chevronLeft}</button>
+      <span class="fw-700" style="font-size:13px;">${y}</span>
+      <button class="btn btn-secondary btn-icon btn-sm" ${y>=now.getFullYear()?'disabled':''} onclick="setAdminReportYear2(${y+1})">${icons.chevronRight}</button>
+    </div>`;
 
   return `
-    <div class="section-head"><div><h2>Admin Reports</h2><div class="sub">Consolidated staff hours</div></div></div>
+    <div class="section-head"><div><h2>Admin Reports</h2><div class="sub">Select staff and period</div></div></div>
     <div class="page-pad">
-      <div class="form-group">
-        <label>User</label>
-        <select onchange="setAdminReportUser(this.value)">${userOptions}</select>
+      <div class="card card-sm mb-4" style="background:var(--bg2);">
+        <div class="flex-between" style="margin-bottom:8px;">
+          <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;">Staff</span>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-secondary btn-sm" onclick="selectAllAdminUsers(true)">All</button>
+            <button class="btn btn-secondary btn-sm" onclick="selectAllAdminUsers(false)">None</button>
+          </div>
+        </div>
+        ${checkboxes}
       </div>
-      <div class="flex-between mb-4">
-        <button class="btn btn-secondary btn-icon btn-sm" onclick="setAdminMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
-        <span class="fw-700" style="font-size:13px;">${MONTH_NAMES[m]} ${y}</span>
-        <button class="btn btn-secondary btn-icon btn-sm" ${isFuture?'disabled':''} onclick="setAdminMonth(${next.m},${next.y})">${icons.chevronRight}</button>
+      <div class="tab-row" style="padding:0 0 10px;">
+        <div class="tab-pill ${tab==='month'?'active':''}" onclick="setAdminReportTab('month')">Month</div>
+        <div class="tab-pill ${tab==='year'?'active':''}" onclick="setAdminReportTab('year')">Year</div>
       </div>
+      ${periodNav}
       <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#EDE6FF,#FFE8EE);border-color:var(--violet-light);">
         <div class="flex-between">
-          <span class="fw-700 text-violet">Total Hours</span>
-          <span class="fw-800" style="font-size:14px;color:var(--coral-dark);">${formatMins(gt)}</span>
+          <span class="fw-700 text-violet">Combined Total</span>
+          <span class="fw-800" style="font-size:14px;color:var(--coral-dark);">${formatMins(grandTotal)}</span>
         </div>
-        <div class="text-xs text-muted mt-1">${allEntries.length} entries · ${targetUid === 'all' ? 'All users' : usersToShow[0]?.name}</div>
+        <div class="text-xs text-muted mt-1">${usersToShow.length} staff selected</div>
       </div>
       ${summaryRows || `<div class="empty">${icons.users}<p>No entries found</p></div>`}
       <button class="btn btn-teal btn-full mt-4" onclick="exportAdminPDF()">${icons.download} Export PDF</button>
@@ -1765,7 +1830,20 @@ window.setReportTab = (tab) => { state.reportTab = tab; render(); };
 window.setReportMonth = (m, y) => { state.reportMonth = m; state.reportYear = y; render(); };
 window.setReportYear = (y) => { state.reportYear = y; render(); };
 window.setAdminMonth = (m, y) => { state.adminReportMonth = m; state.adminReportYear = y; render(); };
-window.setAdminReportUser = (uid) => { state.adminReportUser = uid; render(); };
+window.setAdminReportYear2 = (y) => { state.adminReportYear = y; render(); };
+window.setAdminReportTab = (tab) => { state.adminReportTab = tab; render(); };
+window.toggleAdminUser = (uid, checked) => {
+  if (checked) {
+    if (!state.adminSelectedUsers.includes(uid)) state.adminSelectedUsers.push(uid);
+  } else {
+    state.adminSelectedUsers = state.adminSelectedUsers.filter(id => id !== uid);
+  }
+  render();
+};
+window.selectAllAdminUsers = (all) => {
+  state.adminSelectedUsers = all ? state.users.filter(u => u.active).map(u => u.id) : [];
+  render();
+};
 
 window.syncAllUsers = async () => {
   if (!db) { showToast('db is null — not connected'); return; }
