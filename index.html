@@ -490,7 +490,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '2.2';
+const APP_VERSION = '2.3';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -652,7 +652,7 @@ function roundShift(startMins, endMins) {
   // Handle overnight
   if (endMins <= startMins) endMins += 24 * 60;
   const raw = endMins - startMins;
-  return Math.round(raw / 15) * 15;
+  return Math.round(raw / 5) * 5;
 }
 
 function formatDate(d) {
