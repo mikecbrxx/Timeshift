@@ -479,7 +479,7 @@
     </svg>
     <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;margin-top:16px;">TimeShift</div>
     <div id="boot-status" style="font-family:sans-serif;font-size:12px;color:rgba(255,255,255,0.55);margin-top:8px;">Loading…</div>
-    <div id="boot-debug" style="font-family:monospace;font-size:10px;color:rgba(255,255,255,0.35);margin-top:12px;text-align:center;padding:0 20px;"></div>
+    <div id="boot-debug" style="font-family:monospace;font-size:13px;color:#FFD700;margin-top:16px;text-align:center;padding:0 20px;font-weight:bold;"></div>
   </div>
   <script>
     // Runs immediately — before module script — to show localStorage state
@@ -519,7 +519,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '3.0';
+const APP_VERSION = '3.1';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -1658,6 +1658,17 @@ function renderConfig() {
       </div>
 
       <div class="fw-700 text-xs text-muted mb-4" style="text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 8px;">Database</div>
+      <div class="card card-sm mb-4" style="background:#1a0f3e;border-color:#5E3FA3;">
+        <div style="font-family:monospace;font-size:11px;color:#a0ffa0;line-height:1.8;">
+          <div>Version: v${APP_VERSION}</div>
+          <div>DEMO_MODE: ${DEMO_MODE}</div>
+          <div>db: ${db ? 'connected' : 'null'}</div>
+          <div>ts_firebase key: ${localStorage.getItem('ts_firebase') ? 'present ✓' : 'MISSING ✗'}</div>
+          <div>sl_firebase key: ${localStorage.getItem('sl_firebase') ? 'present (old)' : 'not found'}</div>
+          ${state.firebaseError ? `<div style="color:#ff6b6b;">Error: ${state.firebaseError}</div>` : ''}
+          <div>Users loaded: ${state.users.length}</div>
+        </div>
+      </div>
       <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('settings')">
         <div class="flex-between">
           <div class="flex-row">
@@ -2656,6 +2667,7 @@ async function init() {
   const online = await checkOnlineAsync();
   if (!online) {
     // Remove boot screen and show offline blocker
+    await new Promise(r => setTimeout(r, 800));
     const boot = document.getElementById('boot-screen');
     if (boot) boot.remove();
     state.online = false;
