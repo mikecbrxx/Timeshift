@@ -490,7 +490,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '2.6';
+const APP_VERSION = '2.9';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -513,10 +513,10 @@ async function initFirebase() {
   const cfg = getFirebaseConfig();
   if (!cfg) { DEMO_MODE = true; return; }
   try {
-    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const { initializeApp, getApps, getApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
     const fs = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
 
-    // Assign all Firestore helpers FIRST before using any of them
+    // Assign all Firestore helpers FIRST
     fbCollection = fs.collection;
     fbDoc        = fs.doc;
     fbGetDocs    = fs.getDocs;
@@ -524,16 +524,24 @@ async function initFirebase() {
     fbUpdateDoc  = fs.updateDoc;
     fbDeleteDoc  = fs.deleteDoc;
 
-    // Now safe to use fs.getFirestore
-    fbApp = getApps().length ? getApps()[0] : initializeApp(cfg);
-    db    = fs.getFirestore(fbApp);
+    // Safely initialise — reuse existing app if already initialised
+    try {
+      fbApp = getApp();
+    } catch(e) {
+      fbApp = initializeApp(cfg);
+    }
+    db = fs.getFirestore(fbApp);
 
     DEMO_MODE = false;
     state.fbStatus = 'Connected to Firebase ✓';
+    console.log('Firebase OK, db:', !!db);
   } catch(e) {
     DEMO_MODE = true;
+    db = null;
     state.fbStatus = 'Firebase error: ' + e.message;
-    showToast('Firebase error: ' + e.message);
+    console.error('Firebase init error:', e);
+    // Don't show toast here — will show on boot screen briefly, show after load instead
+    state.firebaseError = e.message;
   }
 }
 
@@ -569,6 +577,7 @@ let state = {
   adminSelectedUsers: [],  // empty = all users
   loading: false,
   fbStatus: '',
+  firebaseError: null,
   auditLog: [],
   auditCutoffDate: new Date().toISOString().slice(0,10),
   lastBackupDate: null,
@@ -746,10 +755,8 @@ function tryLogin(pin) {
     auditLog('LOGIN', 'User logged in');
     if (user.role === 'admin') setTimeout(checkBackupReminder, 1500);
     // Reload all data fresh from Firebase on every login
-    if (!DEMO_MODE && db) {
-      loadFirebaseData().then(() => {
-        render();
-      }).catch(e => console.error('Login reload failed:', e));
+    if (!DEMO_MODE && db && state.online) {
+      loadFirebaseData().then(() => render()).catch(e => console.error('Login reload failed:', e));
     }
     state.screen = 'home';
     state.pinInput = '';
@@ -1278,8 +1285,45 @@ function renderAdminReports() {
 
   // Build summary rows
   let summaryRows = '', grandTotal = 0;
+  const week = getWeekBounds(now);
 
-  if (tab === 'month') {
+  if (tab === 'week') {
+    usersToShow.forEach(u => {
+      const ue = state.entries.filter(e => {
+        if (e.user_id !== u.id) return false;
+        const d = parseDate(e.date);
+        return d >= week.start && d <= week.end;
+      }).sort((a,b) => a.date.localeCompare(b.date));
+      const total = sumMins(ue);
+      grandTotal += total;
+      if (!ue.length) {
+        summaryRows += `<div class="entry-item" style="cursor:default;opacity:0.5;">
+          <div class="flex-between">
+            <div class="flex-row">
+              <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
+              <span class="fw-700 text-sm">${u.name}</span>
+            </div>
+            <span class="text-xs text-muted">No entries</span>
+          </div>
+        </div>`;
+        return;
+      }
+      summaryRows += `<div style="margin-bottom:10px;">
+        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;">
+          <div class="flex-row">
+            <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
+            <span class="fw-700 text-sm">${u.name}</span>
+          </div>
+          <span class="fw-800 text-violet">${formatMins(total)}</span>
+        </div>
+        ${ue.map(e => `<div class="flex-between" style="padding:4px 6px;font-size:11px;">
+          <span style="color:var(--text2);">${displayDateShort(e.date)}</span>
+          <span style="color:var(--text3);">${e.shifts.map(s=>s.start+'–'+s.end).join(' · ')}</span>
+          <span class="fw-700 text-coral">${formatMins(e.total_mins)}</span>
+        </div>`).join('')}
+      </div>`;
+    });
+  } else if (tab === 'month') {
     usersToShow.forEach(u => {
       const ue = state.entries.filter(e => {
         if (e.user_id !== u.id) return false;
@@ -1315,7 +1359,7 @@ function renderAdminReports() {
         </div>`).join('')}
       </div>`;
     });
-  } else {
+  } else if (tab === 'year') {
     // Year view — monthly breakdown per user
     usersToShow.forEach(u => {
       const ue = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
@@ -1342,7 +1386,13 @@ function renderAdminReports() {
     });
   }
 
-  const periodNav = tab === 'month' ? `
+  const weekLabel = `${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+  const periodNav = tab === 'week' ? `
+    <div class="card card-sm mb-4" style="background:var(--bg2);text-align:center;">
+      <span class="fw-700 text-sm">${weekLabel}</span>
+      <div class="text-xs text-muted mt-1">Mon – Sun · current week</div>
+    </div>` :
+  tab === 'month' ? `
     <div class="flex-between mb-4" style="gap:6px;">
       <button class="btn btn-secondary btn-icon btn-sm" onclick="setAdminMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
       <span class="fw-700" style="font-size:13px;">${MONTH_NAMES[m]} ${y}</span>
@@ -1372,6 +1422,7 @@ function renderAdminReports() {
         ${checkboxes}
       </div>
       <div class="tab-row" style="padding:0 0 10px;">
+        <div class="tab-pill ${tab==='week'?'active':''}" onclick="setAdminReportTab('week')">This Week</div>
         <div class="tab-pill ${tab==='month'?'active':''}" onclick="setAdminReportTab('month')">Month</div>
         <div class="tab-pill ${tab==='year'?'active':''}" onclick="setAdminReportTab('year')">Year</div>
       </div>
@@ -2397,7 +2448,10 @@ async function loadFirebaseData() {
   } catch(e) {
     state.loading = false;
     console.error('loadFirebaseData failed:', e);
-    showToast('Failed to load: ' + e.message);
+    state.firebaseError = e.message;
+    showToast('Failed to load data: ' + e.message);
+    console.error('loadFirebaseData error:', e);
+    // No fallback — data must come from Firebase
   }
 }
 
@@ -2515,6 +2569,16 @@ function checkBackupReminder() {
 // ═══════════════════════════════════
 // CONNECTIVITY
 // ═══════════════════════════════════
+async function checkOnlineAsync() {
+  // Quick connectivity check before doing anything
+  try {
+    await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store' });
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
 window.checkOnline = function() {
   state.online = null;
   render();
@@ -2525,15 +2589,16 @@ window.checkOnline = function() {
 };
 
 window.refreshApp = async function() {
+  const online = await checkOnlineAsync();
+  if (!online) {
+    state.online = false;
+    render();
+    return;
+  }
+  state.online = true;
   if (!DEMO_MODE && db) {
-    state.loading = true; render();
     await loadFirebaseData();
-    state.loading = false;
-    checkOnline();
-    showToast('Data refreshed from Firebase');
-  } else {
-    checkOnline();
-    showToast('Refreshed');
+    showToast('Data refreshed');
   }
   render();
 };
@@ -2551,26 +2616,47 @@ window.addEventListener('offline', () => { state.online = false; render(); });
 // INIT
 // ═══════════════════════════════════
 async function init() {
-  // Boot screen is already showing via static HTML — no render() needed yet
+  // Boot screen showing via static HTML
 
-  // Connect to Firebase
-  await initFirebase();
+  // Step 1: Check connectivity first — no point loading anything if offline
+  const online = await checkOnlineAsync();
+  if (!online) {
+    // Remove boot screen and show offline blocker
+    const boot = document.getElementById('boot-screen');
+    if (boot) boot.remove();
+    state.online = false;
+    render();
+    return;
+  }
+  state.online = true;
 
-  if (!DEMO_MODE && db) {
-    await loadFirebaseData();  // loads users, entries, audit from Firestore
+  const cfg = getFirebaseConfig();
+  if (cfg) {
+    // Step 2: Firebase configured — connect and load live data only
+    await initFirebase();
+    if (!DEMO_MODE && db) {
+      await loadFirebaseData();
+    } else {
+      // Firebase config exists but init failed — show error, do NOT load demo data
+      const boot = document.getElementById('boot-screen');
+      if (boot) boot.remove();
+      state.online = true;
+      render();
+      setTimeout(() => showToast('Firebase error: ' + (state.firebaseError || 'Unknown error')), 300);
+      return;
+    }
   } else {
-    initDemoData();            // no Firebase config — use demo data
+    // Step 3: No Firebase config — demo mode only
+    initDemoData();
   }
 
   state.loading = false;
-  loadBackupPrefs();  // restore backup date and reminder days
+  loadBackupPrefs();
 
-  // Remove static boot screen and show the real app
+  // Remove boot screen and show PIN
   const boot = document.getElementById('boot-screen');
   if (boot) boot.remove();
-
-  // Now check connectivity and show PIN screen
-  checkOnline();
+  render();
 }
 init();
 </script>
