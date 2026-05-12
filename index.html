@@ -478,8 +478,37 @@
       <defs><linearGradient id="bl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
     </svg>
     <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;margin-top:16px;">TimeShift</div>
-    <div style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.55);margin-top:8px;">Loading…</div>
+    <div id="boot-status" style="font-family:sans-serif;font-size:12px;color:rgba(255,255,255,0.55);margin-top:8px;">Loading…</div>
+    <div id="boot-debug" style="font-family:monospace;font-size:10px;color:rgba(255,255,255,0.35);margin-top:12px;text-align:center;padding:0 20px;"></div>
   </div>
+  <script>
+    // Runs immediately — before module script — to show localStorage state
+    (function() {
+      const dbg = document.getElementById('boot-debug');
+      const status = document.getElementById('boot-status');
+      const cfg = localStorage.getItem('ts_firebase');
+      const oldCfg = localStorage.getItem('sl_firebase'); // check for old key
+      if (cfg) {
+        try {
+          const parsed = JSON.parse(cfg);
+          dbg.textContent = 'Firebase config: ' + (parsed.projectId || 'found');
+          status.textContent = 'Connecting to Firebase…';
+          // Migrate old key if present
+        } catch(e) {
+          dbg.textContent = 'Config parse error: ' + e.message;
+        }
+      } else if (oldCfg) {
+        // Migrate old sl_firebase key to ts_firebase
+        localStorage.setItem('ts_firebase', oldCfg);
+        localStorage.removeItem('sl_firebase');
+        dbg.textContent = 'Migrated config from old key';
+        status.textContent = 'Connecting to Firebase…';
+      } else {
+        dbg.textContent = 'No Firebase config — demo mode';
+        status.textContent = 'Starting demo…';
+      }
+    })();
+  </script>
 </div>
 
 <script type="module">
@@ -490,7 +519,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '2.9';
+const APP_VERSION = '3.0';
 
 // ── FIREBASE CONFIG ───────────────────────────────────────
 // Loaded from localStorage (set via Admin → Config screen)
@@ -2617,8 +2646,13 @@ window.addEventListener('offline', () => { state.online = false; render(); });
 // ═══════════════════════════════════
 async function init() {
   // Boot screen showing via static HTML
+  const setBootStatus = (msg) => {
+    const el = document.getElementById('boot-status');
+    if (el) el.textContent = msg;
+  };
 
   // Step 1: Check connectivity first — no point loading anything if offline
+  setBootStatus('Checking connection…');
   const online = await checkOnlineAsync();
   if (!online) {
     // Remove boot screen and show offline blocker
@@ -2633,8 +2667,10 @@ async function init() {
   const cfg = getFirebaseConfig();
   if (cfg) {
     // Step 2: Firebase configured — connect and load live data only
+    setBootStatus('Connecting to Firebase…');
     await initFirebase();
     if (!DEMO_MODE && db) {
+      setBootStatus('Loading data…');
       await loadFirebaseData();
     } else {
       // Firebase config exists but init failed — show error, do NOT load demo data
