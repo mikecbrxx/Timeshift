@@ -1299,7 +1299,10 @@ function renderUsers() {
       <div><h2>Users</h2><div class="sub">${users.length} active staff</div></div>
       <button class="btn btn-primary btn-sm" onclick="openAddUser()">${icons.plus} Add User</button>
     </div>
-    <div class="page-pad">${cards}</div>
+    <div class="page-pad">
+      ${!DEMO_MODE && db ? `<button class="btn btn-teal btn-full mb-4" onclick="syncAllUsers()">${icons.refresh} Sync All Users to Firebase</button>` : ''}
+      ${cards}
+    </div>
     <div style="height:20px;"></div>`;
 }
 
@@ -1624,6 +1627,24 @@ window.setReportMonth = (m, y) => { state.reportMonth = m; state.reportYear = y;
 window.setReportYear = (y) => { state.reportYear = y; render(); };
 window.setAdminMonth = (m, y) => { state.adminReportMonth = m; state.adminReportYear = y; render(); };
 window.setAdminReportUser = (uid) => { state.adminReportUser = uid; render(); };
+
+window.syncAllUsers = async () => {
+  if (!db) { showToast('Firebase not connected'); return; }
+  showToast('Syncing users…');
+  let ok = 0;
+  for (const user of state.users) {
+    try {
+      await fbSetDoc(fbDoc(db, 'users', user.id), user);
+      ok++;
+    } catch(e) {
+      showToast('Failed on ' + user.name + ': ' + e.message);
+      return;
+    }
+  }
+  state.fbStatus = `Synced ${ok} users to Firestore ✓`;
+  showToast(`${ok} users synced ✓`);
+  render();
+};
 
 window.openAddUser = () => {
   state.modal = 'add-user';
