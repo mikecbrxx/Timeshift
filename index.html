@@ -538,7 +538,7 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v5.2</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v5.3</div>
   <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Starting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
@@ -606,7 +606,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '5.2';
+const APP_VERSION = '5.3';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -757,8 +757,9 @@ let state = {
   adminReportYear: new Date().getFullYear(),
   adminReportTab: 'month',
   reportViewMode: 'own',  // 'own' or 'staff'
-  reportDrillMonth: null,   // {m, y} when drilling into a month from year view
-  reportDrillWeek: null,    // week start date string when drilling into a week from month view
+  reportDrillMonth: null,
+  reportDrillWeek: null,
+  navStack: [],              // history stack for back navigation
   adminSelectedUsers: [],  // empty = all users
   adminDrillUser: null,      // user id being drilled into
   loading: false,
@@ -2578,6 +2579,8 @@ function renderProfileMenu() {
 // ACTIONS
 // ═══════════════════════════════════
 window.nav = (screen) => {
+  // Clear nav stack when navigating away from reports
+  if (screen !== 'reports') state.navStack = [];
   state.screen = screen;
   state.profileMenu = false;
   if (screen === 'log') state.modalData = {};
@@ -2735,6 +2738,16 @@ window.setEntriesMonth = (m, y) => {
 
 window.setReportTab = (tab) => { state.reportTab = tab; render(); };
 
+function pushNav() {
+  // Save current report position so back button can restore it
+  state.navStack.push({
+    screen: state.screen,
+    reportTab: state.reportTab,
+    reportMonth: state.reportMonth,
+    reportYear: state.reportYear
+  });
+}
+
 // ── Report overlay (on-screen first, then print) ──
 window.showReportOverlay = function(title, bodyHtml) {
   const overlay = document.getElementById('report-overlay');
@@ -2783,6 +2796,7 @@ window.setReportViewMode = (mode) => { state.reportViewMode = mode; render(); };
 
 // Drill from year into a specific month (shows week totals)
 window.drillMonth = (m, y) => {
+  pushNav();
   state.reportTab = 'month';
   state.reportMonth = m;
   state.reportYear = y;
@@ -2791,6 +2805,7 @@ window.drillMonth = (m, y) => {
 
 // Drill from month into a specific week
 window.drillWeek = function(weekStartStr) {
+  pushNav();
   const weekStart = parseDate(weekStartStr);
   const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
   const u = state.currentUser;
@@ -2804,6 +2819,7 @@ window.drillWeek = function(weekStartStr) {
 };
 
 window.showDayDetail = function(entryId) {
+  pushNav();
   const u = state.currentUser;
   const e = state.entries.find(x => x.id === entryId);
   if (!e) return;
@@ -3912,14 +3928,47 @@ window.exitApp = function() {
 // Back FAB handler — go back logically
 window.handleBackFab = function() {
   const screen = state.screen;
+
+  // If report overlay is showing, close it and pop nav
+  const reportOv = document.getElementById('report-overlay');
+  if (reportOv && reportOv.style.display === 'flex') {
+    closeReportOverlay();
+    if (state.navStack.length) state.navStack.pop();
+    return;
+  }
+
+  // If print overlay is showing, close it
+  const printOv = document.getElementById('print-overlay');
+  if (printOv && printOv.style.display === 'block') {
+    closePrintOverlay();
+    return;
+  }
+
   // Config sub-screens go back to config
   if (['users','audit','backup','settings','freeze'].includes(screen)) {
     nav('config');
-  } else if (screen === 'admin-drill') {
-    nav('reports');
-  } else {
-    nav('home');
+    return;
   }
+
+  // Admin drill-down goes back to reports
+  if (screen === 'admin-drill') {
+    nav('reports');
+    return;
+  }
+
+  // Reports screen — pop nav stack to go back one drill level
+  if (screen === 'reports' && state.navStack.length > 0) {
+    const prev = state.navStack.pop();
+    state.reportTab   = prev.reportTab;
+    state.reportMonth = prev.reportMonth;
+    state.reportYear  = prev.reportYear;
+    render();
+    return;
+  }
+
+  // Default — go home
+  state.navStack = []; // clear stack when going home
+  nav('home');
 };
 
 // ── Android hardware back button — double press to exit ──
