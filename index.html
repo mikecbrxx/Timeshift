@@ -13,6 +13,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<!-- Firebase SDK — loaded as regular scripts, no dynamic import needed -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -521,7 +524,7 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.6</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.7</div>
   <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Starting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
@@ -565,7 +568,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '4.6';
+const APP_VERSION = '4.7';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -643,52 +646,47 @@ let fbApp = null;
 // Module-level Firestore function references
 let fbCollection, fbDoc, fbGetDocs, fbSetDoc, fbUpdateDoc, fbDeleteDoc;
 
-async function initFirebase() {
+function initFirebase() {
+  // Uses firebase-app-compat and firebase-firestore-compat loaded via <script> tags
+  // No dynamic import() needed — works in all browsers including mobile
   const cfg = getFirebaseConfig();
   if (!cfg) { DEMO_MODE = true; return; }
 
-  // Wrap SDK imports in a timeout — dynamic import can hang on slow networks
-  function importWithTimeout(url, ms) {
-    return Promise.race([
-      import(url),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('SDK load timed out: ' + url)), ms))
-    ]);
-  }
-
   try {
-    _tsSetMsg('Loading Firebase SDK…');
-    const [{ initializeApp, getApps, getApp }, fs] = await Promise.all([
-      importWithTimeout('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js', 12000),
-      importWithTimeout('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js', 12000)
-    ]);
-
-    // Assign all Firestore helpers FIRST
-    fbCollection = fs.collection;
-    fbDoc        = fs.doc;
-    fbGetDocs    = fs.getDocs;
-    fbSetDoc     = fs.setDoc;
-    fbUpdateDoc  = fs.updateDoc;
-    fbDeleteDoc  = fs.deleteDoc;
-
     _tsSetMsg('Initialising database…');
-    // Safely initialise — reuse existing app if already initialised
-    try {
-      fbApp = getApp();
-    } catch(e) {
-      fbApp = initializeApp(cfg);
+
+    if (!window.firebase) throw new Error('Firebase SDK not loaded — check network');
+
+    // Initialise or reuse existing app
+    if (!firebase.apps.length) {
+      fbApp = firebase.initializeApp(cfg);
+    } else {
+      fbApp = firebase.app();
     }
-    db = fs.getFirestore(fbApp);
+
+    const fsRef = firebase.firestore();
+
+    // Map compat API to the same function signatures used throughout the app
+    db = fsRef;
+
+    // Assign helper functions using compat API
+    fbCollection = (db, col)         => db.collection(col);
+    fbDoc        = (db, col, id)     => db.collection(col).doc(id);
+    fbGetDocs    = (ref)             => ref.get().then(snap => snap);
+    fbSetDoc     = (ref, data)       => ref.set(data);
+    fbUpdateDoc  = (ref, data)       => ref.update(data);
+    fbDeleteDoc  = (ref)             => ref.delete();
 
     DEMO_MODE = false;
     state.fbStatus = 'Connected to Firebase ✓';
-    console.log('Firebase OK');
+    console.log('Firebase OK (compat)');
   } catch(e) {
     DEMO_MODE = true;
     db = null;
     state.fbStatus = 'Firebase error: ' + e.message;
     state.firebaseError = e.message;
     console.error('Firebase init error:', e);
-    throw e; // re-throw so _tsRunStartup catches it and shows blocked screen
+    throw e;
   }
 }
 
@@ -3696,25 +3694,12 @@ async function _tsRunStartup() {
   }
   state.online = true;
 
-  // Step 2 — Initialise Firebase
+  // Step 2 — Initialise Firebase (synchronous with compat SDK)
   _tsSetMsg('Connecting to Firebase…');
-  // (initFirebase will update the message itself as it progresses)
-  let initTimeout = null;
-  const timeoutPromise = new Promise((_, reject) => {
-    initTimeout = setTimeout(() => reject(new Error('Connection timed out')), TIMEOUT_MS);
-  });
-
   try {
-    await Promise.race([
-      (async () => {
-        await initFirebase();
-        if (DEMO_MODE || !db) throw new Error(state.firebaseError || 'Firebase failed to initialise');
-      })(),
-      timeoutPromise
-    ]);
-    clearTimeout(initTimeout);
+    initFirebase();
+    if (DEMO_MODE || !db) throw new Error(state.firebaseError || 'Firebase failed to initialise');
   } catch(e) {
-    clearTimeout(initTimeout);
     _tsShowBlocked('Could not connect to the database.\nPlease check your connection and try again.\n\n' + e.message);
     return;
   }
