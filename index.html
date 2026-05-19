@@ -538,7 +538,7 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v5.4</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v5.5</div>
   <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Starting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
@@ -559,15 +559,6 @@
   <div id="print-content"></div>
   <div id="print-buttons" style="margin-top:20px;display:flex;gap:10px;">
     <button onclick="isIOS() ? closePrintOverlay() : window.print()" style="background:linear-gradient(135deg,#7C5CBF,#5E3FA3);color:white;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;flex:1;" id="print-btn">🖨 Print / Save as PDF</button>
-<script>
-  // On iOS, hide print overlay button (jsPDF used instead — this overlay won't show)
-  document.addEventListener('DOMContentLoaded', function() {
-    if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
-      var btn = document.getElementById('print-btn');
-      if (btn) btn.textContent = '✕ Close';
-    }
-  });
-</script>
     <button onclick="closePrintOverlay()" style="background:#f0f0f0;color:#333;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;flex:1;">✕ Close</button>
   </div>
 </div>
@@ -615,7 +606,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '5.4';
+const APP_VERSION = '5.5';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
