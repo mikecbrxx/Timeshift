@@ -538,7 +538,7 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.9</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v5.1</div>
   <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Starting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
@@ -606,7 +606,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '4.9';
+const APP_VERSION = '5.1';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -847,6 +847,19 @@ function getRateForDate(user, dateStr) {
 function calcEarnings(totalMins, rate) {
   if (!rate) return null;
   return (totalMins / 60) * rate.hourly_rate;
+}
+
+function pdfTimestamp() {
+  // Returns YYYYMMDD-HHMMSS for use in PDF filenames
+  const now = new Date();
+  const pad = (n,w) => String(n).padStart(w,'0');
+  return pad(now.getFullYear(),4)
+    + pad(now.getMonth()+1,2)
+    + pad(now.getDate(),2)
+    + '-'
+    + pad(now.getHours(),2)
+    + pad(now.getMinutes(),2)
+    + pad(now.getSeconds(),2);
 }
 
 function fmtCurrency(amount) {
@@ -1381,26 +1394,146 @@ function renderEntries() {
 }
 
 // ── REPORTS ──
+// ── Report helpers at module scope (no onclick string-passing) ──
+function _rptEarningsLine(entries, user) {
+  const ep = calcPeriodEarnings(entries, user);
+  if (!ep.hasRates) return '';
+  return '<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ' + fmtCurrency(ep.total) + (ep.unrated>0?' ('+ep.unrated+' unrated)':'') + '</div>';
+}
+
+function _rptWeekGroupEntries(entries) {
+  // Group entries by ISO week, returns sorted array of {key, start, end, entries}
+  const weekMap = {};
+  entries.forEach(e => {
+    const d = parseDate(e.date);
+    const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    const key = mon.toISOString().slice(0,10);
+    if (!weekMap[key]) weekMap[key] = { key, start:mon, end:sun, entries:[] };
+    weekMap[key].entries.push(e);
+  });
+  return Object.values(weekMap).sort((a,b) => a.start - b.start);
+}
+
+function buildScreenReport(type) {
+  // Builds and shows on-screen report — called from View & Export button
+  const u = state.currentUser;
+  const now = new Date();
+  let title = '', bodyHtml = '';
+
+  if (type === 'week') {
+    const week = getWeekBounds(now);
+    const entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d >= week.start && d <= week.end;
+    }).sort((a,b) => a.date.localeCompare(b.date));
+    const wkLabel = week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' – ' + week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    title = 'Week ' + wkLabel + ' — ' + u.name;
+    bodyHtml = _buildWeekReportHTML(entries, u, wkLabel);
+
+  } else if (type === 'month') {
+    const m = state.reportMonth, y = state.reportYear;
+    const entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d.getMonth() === m && d.getFullYear() === y;
+    }).sort((a,b) => a.date.localeCompare(b.date));
+    title = MONTH_NAMES[m] + ' ' + y + ' — ' + u.name;
+    bodyHtml = _buildMonthReportHTML(entries, u, m, y);
+
+  } else {
+    const y = state.reportYear;
+    const entries = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
+    title = y + ' — ' + u.name;
+    bodyHtml = _buildYearReportHTML(entries, u, y);
+  }
+  showReportOverlay(title, bodyHtml);
+}
+window.buildScreenReport = buildScreenReport;
+
+function _buildWeekReportHTML(entries, u, wkLabel) {
+  const total = sumMins(entries);
+  let html = '<div class="rpt-section">';
+  html += '<div class="rpt-total" style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:2px solid #7C5CBF;margin-bottom:8px;">';
+  html += '<span>Week ' + wkLabel + '</span><span>' + formatMins(total) + '</span></div>';
+  html += _rptEarningsLine(entries, u);
+  entries.forEach(e => {
+    const rate = getRateForDate(u, e.date);
+    const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '';
+    html += '<div class="rpt-row" style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;">';
+    html += '<div><div style="font-weight:600;">' + displayDate(e.date) + '</div>';
+    html += '<div style="font-size:11px;color:#888;">' + e.shifts.map(s=>s.start+'–'+s.end).join(' · ') + '</div></div>';
+    html += '<div style="text-align:right;"><div style="font-weight:700;color:#E84D6F;">' + formatMins(e.total_mins) + '</div>';
+    if (earn) html += '<div style="font-size:11px;color:#1A7A42;font-weight:600;">' + earn + '</div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function _buildMonthReportHTML(entries, u, m, y) {
+  const total = sumMins(entries);
+  const weeks = _rptWeekGroupEntries(entries);
+  let html = '<div class="rpt-section">';
+  html += '<div class="rpt-total" style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:2px solid #7C5CBF;margin-bottom:8px;">';
+  html += '<span>' + MONTH_NAMES[m] + ' ' + y + '</span><span>' + formatMins(total) + '</span></div>';
+  html += _rptEarningsLine(entries, u);
+  weeks.forEach(wk => {
+    const wkTotal = sumMins(wk.entries);
+    const wkEp = calcPeriodEarnings(wk.entries, u);
+    const wkLabel = wk.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' – ' + wk.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    html += '<div style="margin:6px 0 2px;font-weight:700;font-size:12px;color:#5E3FA3;">Week ' + wkLabel + '</div>';
+    wk.entries.forEach(e => {
+      const rate = getRateForDate(u, e.date);
+      const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '';
+      html += '<div class="rpt-day" style="display:flex;justify-content:space-between;padding:3px 8px;font-size:12px;">';
+      html += '<span>' + displayDate(e.date) + ' <span style="color:#888;font-size:11px;">' + e.shifts.map(s=>s.start+'–'+s.end).join(' · ') + '</span></span>';
+      html += '<span style="font-weight:600;color:#E84D6F;">' + formatMins(e.total_mins) + (earn?' <span style="color:#1A7A42;font-size:11px;">'+earn+'</span>':'') + '</span>';
+      html += '</div>';
+    });
+    html += '<div class="rpt-row" style="display:flex;justify-content:space-between;padding:3px 8px;background:#f5f0ff;border-radius:4px;margin-bottom:4px;">';
+    html += '<span style="font-weight:600;">Week total</span>';
+    html += '<span style="font-weight:700;color:#5E3FA3;">' + formatMins(wkTotal) + (wkEp.hasRates?' · <span style="color:#1A7A42;">'+fmtCurrency(wkEp.total)+'</span>':'') + '</span></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function _buildYearReportHTML(entries, u, y) {
+  const total = sumMins(entries);
+  let html = '<div class="rpt-section">';
+  html += '<div class="rpt-total" style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:2px solid #7C5CBF;margin-bottom:8px;">';
+  html += '<span>' + y + '</span><span>' + formatMins(total) + '</span></div>';
+  html += _rptEarningsLine(entries, u);
+  Array.from({length:12}, (_,i) => i).forEach(i => {
+    const me = entries.filter(e => parseDate(e.date).getMonth() === i);
+    if (!me.length) return;
+    const mTotal = sumMins(me);
+    const mEp = calcPeriodEarnings(me, u);
+    const weeks = _rptWeekGroupEntries(me);
+    html += '<div style="margin:8px 0 2px;font-weight:700;font-size:13px;color:#5E3FA3;">' + MONTH_NAMES[i] + '</div>';
+    weeks.forEach(wk => {
+      const wkLabel = wk.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' – ' + wk.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+      const wkEp = calcPeriodEarnings(wk.entries, u);
+      html += '<div class="rpt-row" style="display:flex;justify-content:space-between;padding:3px 8px;font-size:12px;">';
+      html += '<span>Week ' + wkLabel + ' <span style="color:#888;font-size:11px;">('+wk.entries.length+' days)</span></span>';
+      html += '<span style="font-weight:600;color:#E84D6F;">' + formatMins(sumMins(wk.entries)) + (wkEp.hasRates?' · <span style="color:#1A7A42;font-size:11px;">'+fmtCurrency(wkEp.total)+'</span>':'') + '</span>';
+      html += '</div>';
+    });
+    html += '<div class="rpt-row" style="display:flex;justify-content:space-between;padding:3px 8px;background:#fff4e5;border-radius:4px;margin-bottom:6px;">';
+    html += '<span style="font-weight:600;">' + MONTH_NAMES[i] + ' total</span>';
+    html += '<span style="font-weight:700;color:#A05A00;">' + formatMins(mTotal) + (mEp.hasRates?' · <span style="color:#1A7A42;">'+fmtCurrency(mEp.total)+'</span>':'') + '</span></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function renderReports() {
   const u = state.currentUser;
   const now = new Date();
 
-  // ── Helper: earnings line ──
-  function earningsLine(entries, user) {
-    const ep = calcPeriodEarnings(entries, user);
-    if (!ep.hasRates) return '';
-    return `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">
-      Earnings: ${fmtCurrency(ep.total)}${ep.unrated>0?` (${ep.unrated} unrated)`:''}
-    </div>`;
-  }
-
-  // ── Helper: build HTML for on-screen report overlay ──
-  function buildReportHTML(title, summaryHtml, rowsHtml) {
-    return `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">${title}</div>
-      ${summaryHtml}${rowsHtml}`;
-  }
-
-  // ── WEEK — shows day totals, tap day for shift detail ──
+  // ── WEEK — day totals, tap day to see shift detail ──
   function weekReport() {
     const week = getWeekBounds(now);
     const entries = state.entries.filter(e => {
@@ -1409,43 +1542,32 @@ function renderReports() {
       return d >= week.start && d <= week.end;
     }).sort((a,b) => a.date.localeCompare(b.date));
     const total = sumMins(entries);
-    const weekLabel = `${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+    const wkLabel = week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' – ' + week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const ep = calcPeriodEarnings(entries, u);
 
-    const summaryHtml = `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">
-      <div class="flex-between">
-        <span class="fw-700" style="color:#00696F;">Week Total</span>
-        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
-      </div>
-      ${earningsLine(entries, u)}
-      <div class="text-xs text-muted mt-1">${entries.length} days · ${weekLabel}</div>
-    </div>`;
-
-    const rowsHtml = entries.map(e => {
-      const rate = getRateForDate(u, e.date);
-      const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '';
-      return `<div class="entry-item" style="cursor:pointer;" onclick="showDayDetail('${e.id}')">
-        <div class="flex-between">
-          <div>
-            <div class="fw-700 text-sm">${displayDate(e.date)}</div>
-            <div class="text-xs text-muted">${e.shifts.map(s=>s.start+'–'+s.end).join(' · ')}</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
-            ${earn?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${earn}</div>`:''}
-          </div>
-        </div>
-      </div>`;
-    }).join('') || `<div class="empty">${icons.chart}<p>No entries this week</p></div>`;
-
-    return `<div class="page-pad">
-      ${summaryHtml}${rowsHtml}
-      <button class="btn btn-teal btn-full mt-4" onclick="showReportOverlay('Week ${weekLabel} — ${u.name}', ${JSON.stringify(buildReportHTML('Week ' + weekLabel, summaryHtml, rowsHtml))})">
-        ${icons.chart} View &amp; Export Report
-      </button>
-    </div>`;
+    return '<div class="page-pad">'
+      + '<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">'
+      + '<div class="flex-between"><span class="fw-700" style="color:#00696F;">Week Total</span>'
+      + '<span class="fw-800 text-violet" style="font-size:14px;">' + formatMins(total) + '</span></div>'
+      + _rptEarningsLine(entries, u)
+      + '<div class="text-xs text-muted mt-1">' + entries.length + ' days · ' + wkLabel + '</div></div>'
+      + entries.map(e => {
+          const rate = getRateForDate(u, e.date);
+          const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '';
+          return '<div class="entry-item" style="cursor:pointer;" data-eid="' + e.id + '" onclick="showDayDetail(this.dataset.eid)">'
+            + '<div class="flex-between"><div>'
+            + '<div class="fw-700 text-sm">' + displayDate(e.date) + '</div>'
+            + '<div class="text-xs text-muted">' + e.shifts.map(s=>s.start+'–'+s.end).join(' · ') + '</div></div>'
+            + '<div style="text-align:right;"><div class="fw-800 text-coral">' + formatMins(e.total_mins) + '</div>'
+            + (earn ? '<div class="text-xs" style="color:#1A7A42;font-weight:700;">' + earn + '</div>' : '')
+            + '</div></div></div>';
+        }).join('')
+      + (entries.length ? '' : '<div class="empty">' + icons.chart + '<p>No entries this week</p></div>')
+      + '<button class="btn btn-teal btn-full mt-4" onclick="buildScreenReport(this.dataset.type)" data-type="week">'
+      + icons.chart + ' View &amp; Export Report</button></div>';
   }
 
-  // ── MONTH — shows week totals, tap week to drill into days ──
+  // ── MONTH — week totals, tap week for day drill-down ──
   function monthReport() {
     const m = state.reportMonth, y = state.reportYear;
     const entries = state.entries.filter(e => {
@@ -1454,131 +1576,92 @@ function renderReports() {
       return d.getMonth() === m && d.getFullYear() === y;
     }).sort((a,b) => a.date.localeCompare(b.date));
     const total = sumMins(entries);
-    const prev = m === 0 ? { m:11, y:y-1 } : { m:m-1, y };
-    const next = m === 11 ? { m:0, y:y+1 } : { m:m+1, y };
+    const prev = m === 0 ? {m:11,y:y-1} : {m:m-1,y};
+    const next = m === 11 ? {m:0,y:y+1} : {m:m+1,y};
     const isFuture = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
+    const weeks = _rptWeekGroupEntries(entries);
 
-    // Group entries into ISO weeks
-    function getISOWeek(dateStr) {
-      const d = parseDate(dateStr);
-      const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
-      const sun = new Date(mon); sun.setDate(mon.getDate()+6);
-      return { key: mon.toISOString().slice(0,10), start: mon, end: sun };
-    }
-    const weekMap = {};
-    entries.forEach(e => {
-      const wk = getISOWeek(e.date);
-      if (!weekMap[wk.key]) weekMap[wk.key] = { start:wk.start, end:wk.end, entries:[] };
-      weekMap[wk.key].entries.push(e);
-    });
-    const weeks = Object.values(weekMap).sort((a,b) => a.start - b.start);
-
-    const summaryHtml = `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF0F3,#F0EBFF);border-color:var(--coral-light);">
-      <div class="flex-between">
-        <span class="fw-700" style="color:var(--coral-dark);">Month Total</span>
-        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
-      </div>
-      ${earningsLine(entries, u)}
-      <div class="text-xs text-muted mt-1">${entries.length} days worked</div>
-    </div>`;
-
-    const rowsHtml = weeks.map(wk => {
-      const wkTotal = sumMins(wk.entries);
-      const wkLabel = `${wk.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${wk.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
-      const wkEp = calcPeriodEarnings(wk.entries, u);
-      return `<div class="entry-item" style="cursor:pointer;" onclick="drillWeek('${wk.start.toISOString().slice(0,10)}')">
-        <div class="flex-between">
-          <div>
-            <div class="fw-700 text-sm">Week of ${wkLabel}</div>
-            <div class="text-xs text-muted">${wk.entries.length} day${wk.entries.length!==1?'s':''} · tap for detail</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="fw-800 text-coral">${formatMins(wkTotal)}</div>
-            ${wkEp.hasRates?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${fmtCurrency(wkEp.total)}</div>`:''}
-          </div>
-        </div>
-      </div>`;
-    }).join('') || `<div class="empty">${icons.chart}<p>No entries for ${MONTH_SHORT[m]} ${y}</p></div>`;
-
-    return `<div class="page-pad">
-      <div class="flex-between mb-4">
-        <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
-        <span class="fw-700" style="font-size:13px;">${MONTH_NAMES[m]} ${y}</span>
-        <button class="btn btn-secondary btn-icon btn-sm" ${isFuture?'disabled':''} onclick="setReportMonth(${next.m},${next.y})">${icons.chevronRight}</button>
-      </div>
-      ${summaryHtml}${rowsHtml}
-      <button class="btn btn-teal btn-full mt-4" onclick="showReportOverlay('${MONTH_NAMES[m]} ${y} — ${u.name}', ${JSON.stringify(buildReportHTML(MONTH_NAMES[m] + ' ' + y, summaryHtml, rowsHtml))})">
-        ${icons.chart} View &amp; Export Report
-      </button>
-    </div>`;
+    return '<div class="page-pad">'
+      + '<div class="flex-between mb-4">'
+      + '<button class="btn btn-secondary btn-icon btn-sm" onclick="setReportMonth(' + prev.m + ',' + prev.y + ')">' + icons.chevronLeft + '</button>'
+      + '<span class="fw-700" style="font-size:13px;">' + MONTH_NAMES[m] + ' ' + y + '</span>'
+      + '<button class="btn btn-secondary btn-icon btn-sm" ' + (isFuture?'disabled':'') + ' onclick="setReportMonth(' + next.m + ',' + next.y + ')">' + icons.chevronRight + '</button>'
+      + '</div>'
+      + '<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF0F3,#F0EBFF);border-color:var(--coral-light);">'
+      + '<div class="flex-between"><span class="fw-700" style="color:var(--coral-dark);">Month Total</span>'
+      + '<span class="fw-800 text-violet" style="font-size:14px;">' + formatMins(total) + '</span></div>'
+      + _rptEarningsLine(entries, u)
+      + '<div class="text-xs text-muted mt-1">' + entries.length + ' days worked</div></div>'
+      + weeks.map(wk => {
+          const wkTotal = sumMins(wk.entries);
+          const wkEp = calcPeriodEarnings(wk.entries, u);
+          const wkLabel = wk.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' – ' + wk.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+          return '<div class="entry-item" style="cursor:pointer;" data-wk="' + wk.key + '" onclick="drillWeek(this.dataset.wk)">'
+            + '<div class="flex-between"><div>'
+            + '<div class="fw-700 text-sm">Week ' + wkLabel + '</div>'
+            + '<div class="text-xs text-muted">' + wk.entries.length + ' day' + (wk.entries.length!==1?'s':'') + ' · tap for detail</div>'
+            + '</div><div style="text-align:right;">'
+            + '<div class="fw-800 text-coral">' + formatMins(wkTotal) + '</div>'
+            + (wkEp.hasRates ? '<div class="text-xs" style="color:#1A7A42;font-weight:700;">' + fmtCurrency(wkEp.total) + '</div>' : '')
+            + '</div></div></div>';
+        }).join('')
+      + (weeks.length ? '' : '<div class="empty">' + icons.chart + '<p>No entries for ' + MONTH_SHORT[m] + ' ' + y + '</p></div>')
+      + '<button class="btn btn-teal btn-full mt-4" onclick="buildScreenReport(this.dataset.type)" data-type="month">'
+      + icons.chart + ' View &amp; Export Report</button></div>';
   }
 
-  // ── YEAR — shows month totals, tap month to drill into weeks ──
+  // ── YEAR — month totals, tap month to drill into that month ──
   function yearReport() {
     const y = state.reportYear;
     const entries = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
     const total = sumMins(entries);
-
-    const summaryHtml = `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF4E5,#FFE8EE);border-color:var(--amber);">
-      <div class="flex-between">
-        <span class="fw-700" style="color:#A05A00;">Year Total</span>
-        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
-      </div>
-      ${earningsLine(entries, u)}
-      <div class="text-xs text-muted mt-1">${entries.length} days worked in ${y}</div>
-    </div>`;
-
     const byMonth = Array.from({length:12}, (_,i) => {
       const me = entries.filter(e => parseDate(e.date).getMonth() === i);
-      return { month:i, entries:me, mins:sumMins(me) };
+      return {month:i, entries:me, mins:sumMins(me)};
     }).filter(mm => mm.mins > 0);
 
-    const rowsHtml = byMonth.map(mm => {
-      const mmEp = calcPeriodEarnings(mm.entries, u);
-      return `<div class="entry-item" style="cursor:pointer;" onclick="drillMonth(${mm.month},${y})">
-        <div class="flex-between">
-          <div>
-            <div class="fw-700 text-sm">${MONTH_NAMES[mm.month]}</div>
-            <div class="text-xs text-muted">${mm.entries.length} day${mm.entries.length!==1?'s':''} · tap for weeks</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="fw-800 text-coral">${formatMins(mm.mins)}</div>
-            ${mmEp.hasRates?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${fmtCurrency(mmEp.total)}</div>`:''}
-          </div>
-        </div>
-      </div>`;
-    }).join('') || `<div class="empty">${icons.chart}<p>No entries for ${y}</p></div>`;
-
-    return `<div class="page-pad">
-      <div class="flex-between mb-4">
-        <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportYear(${y-1})">${icons.chevronLeft}</button>
-        <span class="fw-700" style="font-size:13px;">${y}</span>
-        <button class="btn btn-secondary btn-icon btn-sm" ${y>=now.getFullYear()?'disabled':''} onclick="setReportYear(${y+1})">${icons.chevronRight}</button>
-      </div>
-      ${summaryHtml}${rowsHtml}
-      <button class="btn btn-teal btn-full mt-4" onclick="showReportOverlay('${y} — ${u.name}', ${JSON.stringify(buildReportHTML(String(y), summaryHtml, rowsHtml))})">
-        ${icons.chart} View &amp; Export Report
-      </button>
-    </div>`;
+    return '<div class="page-pad">'
+      + '<div class="flex-between mb-4">'
+      + '<button class="btn btn-secondary btn-icon btn-sm" onclick="setReportYear(' + (y-1) + ')">' + icons.chevronLeft + '</button>'
+      + '<span class="fw-700" style="font-size:13px;">' + y + '</span>'
+      + '<button class="btn btn-secondary btn-icon btn-sm" ' + (y>=now.getFullYear()?'disabled':'') + ' onclick="setReportYear(' + (y+1) + ')">' + icons.chevronRight + '</button>'
+      + '</div>'
+      + '<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF4E5,#FFE8EE);border-color:var(--amber);">'
+      + '<div class="flex-between"><span class="fw-700" style="color:#A05A00;">Year Total</span>'
+      + '<span class="fw-800 text-violet" style="font-size:14px;">' + formatMins(total) + '</span></div>'
+      + _rptEarningsLine(entries, u)
+      + '<div class="text-xs text-muted mt-1">' + entries.length + ' days worked in ' + y + '</div></div>'
+      + byMonth.map(mm => {
+          const mmEp = calcPeriodEarnings(mm.entries, u);
+          return '<div class="entry-item" style="cursor:pointer;" data-m="' + mm.month + '" data-y="' + y + '" onclick="drillMonth(+this.dataset.m,+this.dataset.y)">'
+            + '<div class="flex-between"><div>'
+            + '<div class="fw-700 text-sm">' + MONTH_NAMES[mm.month] + '</div>'
+            + '<div class="text-xs text-muted">' + mm.entries.length + ' day' + (mm.entries.length!==1?'s':'') + ' · tap for weeks</div>'
+            + '</div><div style="text-align:right;">'
+            + '<div class="fw-800 text-coral">' + formatMins(mm.mins) + '</div>'
+            + (mmEp.hasRates ? '<div class="text-xs" style="color:#1A7A42;font-weight:700;">' + fmtCurrency(mmEp.total) + '</div>' : '')
+            + '</div></div></div>';
+        }).join('')
+      + (byMonth.length ? '' : '<div class="empty">' + icons.chart + '<p>No entries for ' + y + '</p></div>')
+      + '<button class="btn btn-teal btn-full mt-4" onclick="buildScreenReport(this.dataset.type)" data-type="year">'
+      + icons.chart + ' View &amp; Export Report</button></div>';
   }
 
   const tab = state.reportTab;
-  return `
-    <div class="section-head"><div><h2>Reports</h2><div class="sub">${u.role==='admin'?'Staff hours':'Your hours'}</div></div></div>
-    ${u.role === 'admin' ? `
-    <div class="tab-row" style="padding:0 14px 6px;">
-      <div class="tab-pill ${state.reportViewMode==='own'?'active':''}" onclick="setReportViewMode('own')">My Hours</div>
-      <div class="tab-pill ${state.reportViewMode!=='own'?'active':''}" onclick="setReportViewMode('staff')">Staff Hours</div>
-    </div>` : ''}
-    ${(u.role !== 'admin' || state.reportViewMode === 'own') ? `
-    <div class="tab-row">
-      <div class="tab-pill ${tab==='week'?'active':''}" onclick="setReportTab('week')">This Week</div>
-      <div class="tab-pill ${tab==='month'?'active':''}" onclick="setReportTab('month')">Month</div>
-      <div class="tab-pill ${tab==='year'?'active':''}" onclick="setReportTab('year')">Year</div>
-    </div>
-    ${tab === 'week' ? weekReport() : tab === 'month' ? monthReport() : yearReport()}
-    ` : renderAdminReportsInline()}
-    <div style="height:80px;"></div>`;
+  return '<div class="section-head"><div><h2>Reports</h2><div class="sub">' + (u.role==='admin'?'Staff hours':'Your hours') + '</div></div></div>'
+    + (u.role === 'admin' ? '<div class="tab-row" style="padding:0 14px 6px;">'
+        + '<div class="tab-pill ' + (state.reportViewMode==='own'?'active':'') + '" onclick="setReportViewMode(&quot;own&quot;)">My Hours</div>'
+        + '<div class="tab-pill ' + (state.reportViewMode!=='own'?'active':'') + '" onclick="setReportViewMode(&quot;staff&quot;)">Staff Hours</div>'
+        + '</div>' : '')
+    + (u.role !== 'admin' || state.reportViewMode === 'own'
+        ? '<div class="tab-row">'
+          + '<div class="tab-pill ' + (tab==='week'?'active':'') + '" onclick="setReportTab(&quot;week&quot;)">This Week</div>'
+          + '<div class="tab-pill ' + (tab==='month'?'active':'') + '" onclick="setReportTab(&quot;month&quot;)">Month</div>'
+          + '<div class="tab-pill ' + (tab==='year'?'active':'') + '" onclick="setReportTab(&quot;year&quot;)">Year</div>'
+          + '</div>'
+          + (tab === 'week' ? weekReport() : tab === 'month' ? monthReport() : yearReport())
+        : renderAdminReportsInline())
+    + '<div style="height:80px;"></div>';
 }
 
 // ── ADMIN DRILL — full detail for one user ──
@@ -2701,76 +2784,43 @@ window.drillMonth = (m, y) => {
   render();
 };
 
-// Drill from month into a specific week (shows day totals in overlay)
-window.drillWeek = (weekStartStr) => {
+// Drill from month into a specific week
+window.drillWeek = function(weekStartStr) {
   const weekStart = parseDate(weekStartStr);
   const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
   const u = state.currentUser;
-  const entries = state.entries.filter(e => {
+  const entries = state.entries.filter(function(e) {
     if (e.user_id !== u.id) return false;
     const d = parseDate(e.date);
     return d >= weekStart && d <= weekEnd;
   }).sort((a,b) => a.date.localeCompare(b.date));
-  const total = sumMins(entries);
-  const wkLabel = `${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
-  const ep = calcPeriodEarnings(entries, u);
-
-  const bodyHtml = `
-    <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">
-      <div class="flex-between">
-        <span class="fw-700" style="color:#00696F;">Week Total</span>
-        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
-      </div>
-      ${ep.hasRates?`<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(ep.total)}</div>`:''}
-    </div>
-    ${entries.map(e => {
-      const rate = getRateForDate(u, e.date);
-      const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '';
-      return `<div class="entry-item" style="cursor:default;margin-bottom:6px;">
-        <div class="flex-between">
-          <div>
-            <div class="fw-700 text-sm">${displayDate(e.date)}</div>
-            <div class="text-xs text-muted">${e.shifts.map(s=>s.start+'–'+s.end).join(' · ')}</div>
-            ${e.note?`<div class="text-xs text-muted">${e.note}</div>`:''}
-          </div>
-          <div style="text-align:right;">
-            <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
-            ${earn?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${earn}</div>`:''}
-          </div>
-        </div>
-      </div>`;
-    }).join('')}`;
-
-  showReportOverlay(`Week ${wkLabel} — ${u.name}`, bodyHtml);
+  const wkLabel = weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' – ' + weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  showReportOverlay('Week ' + wkLabel + ' — ' + u.name, _buildWeekReportHTML(entries, u, wkLabel));
 };
 
-// Tap a day to see full shift detail in overlay
-window.showDayDetail = (entryId) => {
+window.showDayDetail = function(entryId) {
   const u = state.currentUser;
   const e = state.entries.find(x => x.id === entryId);
   if (!e) return;
   const rate = getRateForDate(u, e.date);
   const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : null;
-  const bodyHtml = `
-    <div class="fw-700 text-sm mb-4" style="margin-bottom:8px;">${displayDate(e.date)}</div>
-    ${e.shifts.map((s,i) => `<div class="card card-sm mb-4" style="background:var(--bg2);margin-bottom:6px;">
-      <div class="flex-between">
-        <span class="shift-badge badge-${i+1}">Shift ${i+1}</span>
-        <span class="fw-700">${s.start} – ${s.end}</span>
-        <span class="fw-800 text-violet">${formatMins(roundShift(parseTime(s.start),parseTime(s.end)))}</span>
-      </div>
-    </div>`).join('')}
-    <div class="flex-between" style="padding:8px 0;border-top:1.5px solid var(--border);margin-top:4px;">
-      <span class="fw-700">Day Total</span>
-      <span class="fw-800 text-coral" style="font-size:16px;">${formatMins(e.total_mins)}</span>
-    </div>
-    ${earn ? `<div class="flex-between" style="padding:4px 0;">
-      <span class="text-sm text-muted">Earnings</span>
-      <span style="font-weight:700;color:#1A7A42;">${earn}</span>
-    </div>` : ''}
-    ${e.note ? `<div class="text-xs text-muted" style="margin-top:6px;">${e.note}</div>` : ''}`;
-
-  showReportOverlay(displayDate(e.date), bodyHtml);
+  let html = '<div class="fw-700 text-sm" style="margin-bottom:10px;">' + displayDate(e.date) + '</div>';
+  e.shifts.forEach(function(s, i) {
+    html += '<div class="card card-sm" style="background:var(--bg2);margin-bottom:6px;">'
+      + '<div class="flex-between">'
+      + '<span style="font-size:11px;font-weight:700;color:var(--violet);">Shift ' + (i+1) + '</span>'
+      + '<span class="fw-700">' + s.start + ' – ' + s.end + '</span>'
+      + '<span class="fw-800 text-violet">' + formatMins(roundShift(parseTime(s.start),parseTime(s.end))) + '</span>'
+      + '</div></div>';
+  });
+  html += '<div class="flex-between" style="padding:8px 0;border-top:1.5px solid var(--border);margin-top:4px;">'
+    + '<span class="fw-700">Day Total</span>'
+    + '<span class="fw-800 text-coral" style="font-size:16px;">' + formatMins(e.total_mins) + '</span></div>';
+  if (earn) html += '<div class="flex-between" style="padding:4px 0;">'
+    + '<span class="text-sm text-muted">Earnings</span>'
+    + '<span style="font-weight:700;color:#1A7A42;">' + earn + '</span></div>';
+  if (e.note) html += '<div class="text-xs text-muted" style="margin-top:6px;">' + e.note + '</div>';
+  showReportOverlay(displayDate(e.date), html);
 };
 window.setReportMonth = (m, y) => { state.reportMonth = m; state.reportYear = y; render(); };
 window.setReportYear = (y) => { state.reportYear = y; render(); };
@@ -3167,7 +3217,7 @@ window.exportPDF = (type) => {
     columnStyles: hasEarnings ? { 5:{textColor:[27,122,66],fontStyle:'bold'} } : {}
   });
 
-  doc.save(`TimeShift_${u.name.replace(/\s+/g,'_')}_${title.replace(/\s+/g,'_')}.pdf`);
+  doc.save(`TimeShift_${u.name.replace(/\s+/g,'_')}_${title.replace(/\s+/g,'_')}_${pdfTimestamp()}.pdf`);
   auditLog('PDF_EXPORT', `${type} PDF: ${u.name} · ${title}`);
   showToast('PDF exported');
 };
@@ -3248,7 +3298,7 @@ window.exportDrillPDF = () => {
     margin:{left:14,right:14}
   });
 
-  doc.save(`TimeShift_${u.name.replace(/\s+/g,'_')}_${periodLabel.replace(/\s+/g,'_')}.pdf`);
+  doc.save(`TimeShift_${u.name.replace(/\s+/g,'_')}_${periodLabel.replace(/\s+/g,'_')}_${pdfTimestamp()}.pdf`);
   auditLog('ADMIN_DRILL_PDF', `Detail PDF: ${u.name} · ${periodLabel}`);
   showToast('PDF exported');
 };
@@ -3351,7 +3401,7 @@ window.exportAdminPDF = () => {
   doc.setTextColor(124,92,191);
   doc.text(`Combined Total: ${formatMins(grandHours)}${anyEarnings ? '  ·  ' + fmtCurrency(grandEarnings) : ''}`, 14, startY + 6);
 
-  doc.save(`TimeShift_Staff_${period.replace(/[^a-zA-Z0-9]/g,'_')}.pdf`);
+  doc.save(`TimeShift_Staff_${period.replace(/[^a-zA-Z0-9]/g,'_')}_${pdfTimestamp()}.pdf`);
   auditLog('ADMIN_PDF_EXPORT', `Staff PDF: ${period} · ${usersToShow.length} staff`);
   showToast('PDF exported');
 };
@@ -3573,6 +3623,8 @@ This calculates a permanent snapshot for all staff. You can unfreeze later to co
       showToast('Freeze failed: ' + e.message); return;
     }
   }
+  // Clear any snooze for this period — it's now frozen
+  try { localStorage.removeItem('ts_freeze_snooze'); } catch(e) {}
   auditLog('PERIOD_FROZEN', `Period frozen: ${periodEnd} by ${state.currentUser.name}`);
   showToast(`Period ${periodEnd} frozen ✓`);
   render();
@@ -3738,20 +3790,47 @@ function loadBackupPrefs() {
 }
 
 function checkYearEndReminder() {
-  const ye = state.yearEndSettings || { day:5, month:4 };
+  const ye = state.yearEndSettings;
+  // Don't remind if year end has never been configured
+  if (!ye || !ye.day || !ye.month) return;
+
   const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+
   function getYearEnd(year) { return new Date(year, ye.month - 1, ye.day); }
   let lastYearEnd = getYearEnd(now.getFullYear());
   if (lastYearEnd > now) lastYearEnd = getYearEnd(now.getFullYear() - 1);
   const lastYearEndStr = lastYearEnd.toISOString().slice(0,10);
-  const isLastFrozen = state.freezePeriods.some(p => p.period_end === lastYearEndStr);
-  if (!isLastFrozen && lastYearEnd < now) {
-    if (confirm(`Year end ${lastYearEndStr} has passed and earnings are not yet frozen.
 
-Go to Year End & Freeze now?`)) {
-      nav('config');
-      setTimeout(() => nav('freeze'), 100);
+  // Don't remind if already frozen
+  const isLastFrozen = state.freezePeriods.some(p => p.period_end === lastYearEndStr);
+  if (isLastFrozen) return;
+
+  // Don't remind if year end hasn't passed yet
+  if (lastYearEnd >= now) return;
+
+  // Check snooze — stored as "periodEnd|snoozeUntil" in localStorage
+  const snoozeKey = 'ts_freeze_snooze';
+  try {
+    const stored = localStorage.getItem(snoozeKey);
+    if (stored) {
+      const [snoozedPeriod, snoozeUntil] = stored.split('|');
+      // If this snooze is for the current unfrozen period and hasn't expired, skip
+      if (snoozedPeriod === lastYearEndStr && snoozeUntil > todayStr) return;
     }
+  } catch(e) {}
+
+  // Show reminder
+  if (confirm('Year end ' + lastYearEndStr + ' has passed and earnings are not yet frozen.\n\nGo to Year End & Freeze now?')) {
+    nav('config');
+    setTimeout(() => nav('freeze'), 100);
+  } else {
+    // Snooze for 7 days — won't remind again until next week for this period
+    const snoozeUntil = new Date(now);
+    snoozeUntil.setDate(snoozeUntil.getDate() + 7);
+    try {
+      localStorage.setItem(snoozeKey, lastYearEndStr + '|' + snoozeUntil.toISOString().slice(0,10));
+    } catch(e) {}
   }
 }
 
