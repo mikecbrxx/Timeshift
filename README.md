@@ -108,7 +108,8 @@ const firebaseConfig = {
    - `projectId`
    - `appId`
 
-7. Tap **Continue to console**
+6. The values may be cut off on mobile — tap the **copy icon** (bottom right of the code block) to copy the entire config to your clipboard, then paste into Notes to read the full values
+7. Tap **Continue to the console**
 
 ### Step 4 — Connect TimeShift to Firebase
 1. Open TimeShift in your browser and log in as Admin (PIN: `0000` in demo mode)
@@ -131,6 +132,15 @@ service cloud.firestore {
       allow read, write: if true;
     }
     match /entries/{entryId} {
+      allow read, write: if true;
+    }
+    match /audit/{auditId} {
+      allow read, write: if true;
+    }
+    match /freezePeriods/{fpId} {
+      allow read, write: if true;
+    }
+    match /settings/{settingId} {
       allow read, write: if true;
     }
   }
@@ -197,3 +207,4 @@ to reports using `total_mins / 60 * hourly_rate`. No database changes needed.
 |---------|------|-------|
 | v1.0 | May 2026 | Initial release — Supabase |
 | v1.1 | May 2026 | Migrated to Firebase Firestore, renamed to TimeShift |
+| v4.2 | May 2026 | Hourly rates, earnings reports, year end freeze, PDF earnings |

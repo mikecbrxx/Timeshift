@@ -564,7 +564,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '4.1';
+const APP_VERSION = '4.2';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -3238,33 +3238,37 @@ window.clearFirebaseConfig = function() {
 
 // Load all users and entries from Firestore into state
 async function loadFirebaseData() {
-  // Always fetches live from Firebase — nothing is stored locally.
-  // This ensures all users always see up-to-date data.
-  if (!db) return;
+  // Fetches live from Firebase — nothing stored locally.
+  // Essential collections (users, entries) throw on failure — blocks startup.
+  // Optional collections (audit, freezePeriods, settings) fail silently.
+  if (!db) throw new Error('Firestore not initialised');
+
+  // Step A — essential data (must succeed)
+  const [uSnap, eSnap] = await Promise.all([
+    fbGetDocs(fbCollection(db, 'users')),
+    fbGetDocs(fbCollection(db, 'entries'))
+  ]);
+  state.users   = uSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.active !== false);
+  state.entries = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // Step B — optional data (soft fail — don't block startup)
   try {
-    const [uSnap, eSnap, aSnap, fpSnap, yeSnap] = await Promise.all([
-      fbGetDocs(fbCollection(db, 'users')),
-      fbGetDocs(fbCollection(db, 'entries')),
-      fbGetDocs(fbCollection(db, 'audit')),
-      fbGetDocs(fbCollection(db, 'freezePeriods')),
-      fbGetDocs(fbCollection(db, 'settings'))
-    ]);
-    state.users         = uSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.active !== false);
-    state.entries       = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    state.auditLog      = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const aSnap = await fbGetDocs(fbCollection(db, 'audit'));
+    state.auditLog = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.warn('audit load skipped:', e.message); }
+
+  try {
+    const fpSnap = await fbGetDocs(fbCollection(db, 'freezePeriods'));
     state.freezePeriods = fpSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.warn('freezePeriods load skipped:', e.message); }
+
+  try {
+    const yeSnap = await fbGetDocs(fbCollection(db, 'settings'));
     const yeDoc = yeSnap.docs.find(d => d.id === 'yearEnd');
     if (yeDoc) state.yearEndSettings = yeDoc.data();
-    state.loading  = false;
-    console.log('Loaded from Firebase:', state.users.length, 'users,', state.entries.length, 'entries,', state.auditLog.length, 'audit entries');
-  } catch(e) {
-    state.loading = false;
-    console.error('loadFirebaseData failed:', e);
-    state.firebaseError = e.message;
-    showToast('Failed to load data: ' + e.message);
-    console.error('loadFirebaseData error:', e);
-    // No fallback — data must come from Firebase
-  }
+  } catch(e) { console.warn('settings load skipped:', e.message); }
+
+  console.log('Loaded from Firebase:', state.users.length, 'users,', state.entries.length, 'entries');
 }
 
 // ═══════════════════════════════════
