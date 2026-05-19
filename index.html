@@ -524,7 +524,7 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.7</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.8</div>
   <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Starting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
@@ -568,7 +568,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '4.7';
+const APP_VERSION = '4.8';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -3350,8 +3350,7 @@ This calculates a permanent snapshot for all staff. You can unfreeze later to co
 };
 
 window.unfreezePeriod = async function(id) {
-  const reason = prompt('Enter reason for unfreezing this period:
-(This will be recorded in the audit trail)');
+  const reason = prompt('Enter reason for unfreezing this period:\n(This will be recorded in the audit trail)');
   if (reason === null) return; // cancelled
   if (!reason.trim()) { showToast('A reason is required'); return; }
 
@@ -3438,15 +3437,7 @@ window.restoreBackup = async function() {
     : 'unknown date';
 
   const confirm1 = prompt(
-    `RESTORE BACKUP
-
-File: ${fi.files[0].name}
-Created: ${fileDate}
-Contains: ${restored.users.length} users, ${restored.entries.length} entries
-
-This will OVERWRITE all current data in the app and Firestore.
-
-Type CONFIRM to proceed:`
+    `RESTORE BACKUP\n\nFile: ${fi.files[0].name}\nCreated: ${fileDate}\nContains: ${restored.users.length} users, ${restored.entries.length} entries\n\nThis will OVERWRITE all current data in the app and Firestore.\n\nType CONFIRM to proceed:`
   );
   if (confirm1 !== 'CONFIRM') { showToast('Restore cancelled'); return; }
 
