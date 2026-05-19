@@ -458,6 +458,42 @@
   }
   .pin-digit:focus { border-color: var(--violet-light); background: white; }
 
+  /* ── FAB ── */
+  .fab {
+    position: fixed; right: 16px; bottom: 76px; z-index: 90;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--coral), var(--coral-dark));
+    color: white; border: none; font-size: 26px; font-weight: 300;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 20px rgba(255,107,138,0.5);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .fab:active { transform: scale(0.92); }
+  .fab.hidden { display: none; }
+
+  /* ── BACK BUTTON ── */
+  .back-fab {
+    position: fixed; left: 16px; bottom: 76px; z-index: 90;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--violet); color: white; border: none;
+    cursor: pointer; display: none; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(124,92,191,0.4);
+    transition: transform 0.15s;
+  }
+  .back-fab.visible { display: flex; }
+  .back-fab:active { transform: scale(0.92); }
+  .back-fab svg { width: 18px; height: 18px; }
+
+  /* ── EXIT TOAST ── */
+  .exit-toast {
+    position: fixed; bottom: 130px; left: 50%; transform: translateX(-50%);
+    background: rgba(44,32,64,0.95); color: white;
+    padding: 10px 20px; border-radius: 50px;
+    font-size: 13px; font-weight: 600; z-index: 300;
+    white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    display: none; border: 1px solid rgba(255,255,255,0.1);
+  }
+
   /* Responsive */
   @media (min-width: 480px) {
     .modal { border-radius: 24px; margin: auto; margin-bottom: 20px; }
@@ -501,6 +537,14 @@
 </div>
 
 <div id="app"></div>
+<!-- FAB — primary action (log shift) -->
+<button class="fab hidden" id="fab" onclick="nav('log')" title="Log Shift">+</button>
+<!-- Back FAB — navigate back -->
+<button class="back-fab" id="back-fab" onclick="handleBackFab()" title="Back">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+</button>
+<!-- Exit toast -->
+<div class="exit-toast" id="exit-toast">⚠ Press back again to exit</div>
 
 <script>
   // Migrate old sl_firebase key to ts_firebase if present
@@ -520,7 +564,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '3.4';
+const APP_VERSION = '4.1';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -664,9 +708,14 @@ let state = {
   adminReportTab: 'month',
   reportViewMode: 'own',  // 'own' or 'staff'
   adminSelectedUsers: [],  // empty = all users
+  adminDrillUser: null,      // user id being drilled into
   loading: false,
   fbStatus: '',
   firebaseError: null,
+  freezePeriods: [],    // [{id, period_end, frozen_at, frozen_by, earnings_snapshot, notes}]
+  yearEndSettings: {    // {day: 5, month: 4} = 5 April
+    day: 5, month: 4
+  },
   auditLog: [],
   auditCutoffDate: new Date().toISOString().slice(0,10),
   lastBackupDate: null,
@@ -732,6 +781,71 @@ function initDemoData() {
   });
 
   state.entries = entries;
+}
+
+// ═══════════════════════════════════
+// EARNINGS HELPERS
+// ═══════════════════════════════════
+function getRateForDate(user, dateStr) {
+  // Returns the hourly_rate for a given date, or null if none applies
+  if (!user.rates || !user.rates.length) return null;
+  return user.rates.find(r => dateStr >= r.from_date && dateStr <= r.to_date) || null;
+}
+
+function calcEarnings(totalMins, rate) {
+  if (!rate) return null;
+  return (totalMins / 60) * rate.hourly_rate;
+}
+
+function fmtCurrency(amount) {
+  if (amount === null || amount === undefined) return '—';
+  return '£' + amount.toFixed(2);
+}
+
+function calcPeriodEarnings(entries, user) {
+  // Returns { total: number|null, hasRates: bool, unrated: number }
+  if (!user.rates || !user.rates.length) return { total: null, hasRates: false, unrated: entries.length };
+  let total = 0, unrated = 0;
+  entries.forEach(e => {
+    const rate = getRateForDate(user, e.date);
+    if (rate) {
+      total += calcEarnings(e.total_mins, rate);
+    } else {
+      unrated++;
+    }
+  });
+  return { total, hasRates: true, unrated };
+}
+
+function validateRate(newRate, existingRates, excludeId) {
+  // Returns null if valid, error string if not
+  const others = (existingRates || []).filter(r => r.id !== excludeId);
+  if (!newRate.from_date || !newRate.to_date) return 'Both dates are required';
+  if (newRate.from_date > newRate.to_date) return 'End date must be after start date';
+  if (!newRate.hourly_rate || newRate.hourly_rate <= 0) return 'Hourly rate must be greater than zero';
+  const today = new Date().toISOString().slice(0,10);
+  const isFuture = newRate.from_date > today;
+  const futureRates  = others.filter(r => r.from_date > today);
+  const currentRates = others.filter(r => r.from_date <= today);
+
+  if (isFuture && futureRates.length >= 1)
+    return 'Only 1 future rate allowed. Delete the existing future rate first.';
+  if (!isFuture && currentRates.length >= 3)
+    return 'Maximum 3 current/past rates per person. Delete one to add another.';
+
+  // Check for overlaps across all others
+  for (const r of others) {
+    const overlap = newRate.from_date <= r.to_date && newRate.to_date >= r.from_date;
+    if (overlap) return `Overlaps with existing rate (${r.from_date} – ${r.to_date})`;
+  }
+  return null;
+}
+
+function autoEndDate(fromDate) {
+  // Auto-set to_date to from_date + 2 years
+  const d = new Date(fromDate);
+  d.setFullYear(d.getFullYear() + 2);
+  return d.toISOString().slice(0, 10);
 }
 
 // ═══════════════════════════════════
@@ -842,7 +956,7 @@ function tryLogin(pin) {
   if (user) {
     state.currentUser = user;
     auditLog('LOGIN', 'User logged in');
-    if (user.role === 'admin') setTimeout(checkBackupReminder, 1500);
+    if (user.role === 'admin') { setTimeout(checkBackupReminder, 1500); setTimeout(checkYearEndReminder, 3000); }
     // Reload all data fresh from Firebase on every login
     if (!DEMO_MODE && db && state.online) {
       loadFirebaseData()
@@ -945,10 +1059,8 @@ function renderTopbar() {
   const u = state.currentUser;
   if (!u) return '';
   const tlClass = state.online === true ? 'online' : state.online === false ? 'offline' : 'checking';
-  const showBack = state.screen !== 'home';
   return `<div class="topbar">
     <div class="topbar-logo">
-      ${showBack ? `<div class="topbar-btn back" onclick="nav('home')" title="Back to Home">${icons.chevronLeft}</div>` : ''}
       ${logoSVG(26)}
       <div>
         <div class="topbar-title">TimeShift</div>
@@ -1237,6 +1349,7 @@ function renderReports() {
           <span class="fw-700" style="color:#00696F;">Week Total</span>
           <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
         </div>
+        ${(() => { const e = calcPeriodEarnings(entries, u); return e.hasRates ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(e.total)}${e.unrated>0?` <span style="color:var(--text3)">(${e.unrated} day${e.unrated!==1?'s':''} unrated)</span>`:''}</div>` : ''; })()}
         <div class="text-xs text-muted mt-1">${days.length} days worked · ${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
       </div>
       ${days.map(e => `<div class="entry-item" style="cursor:default;">
@@ -1275,6 +1388,7 @@ function renderReports() {
           <span class="fw-700" style="color:var(--coral-dark);">Month Total</span>
           <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
         </div>
+        ${(() => { const e = calcPeriodEarnings(entries, u); return e.hasRates ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(e.total)}${e.unrated>0?` <span style="color:var(--text3)">(${e.unrated} unrated)</span>`:''}</div>` : ''; })()}
         <div class="text-xs text-muted mt-1">${entries.length} days worked</div>
       </div>
       ${entries.map(e => `<div class="entry-item" style="cursor:default;">
@@ -1311,6 +1425,7 @@ function renderReports() {
           <span class="fw-700" style="color:#A05A00;">Year Total</span>
           <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
         </div>
+        ${(() => { const e = calcPeriodEarnings(entries, u); return e.hasRates ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(e.total)}${e.unrated>0?` <span style="color:var(--text3)">(${e.unrated} unrated)</span>`:''}</div>` : ''; })()}
         <div class="text-xs text-muted mt-1">${entries.length} days worked in ${y}</div>
       </div>
       ${byMonth.filter(m => m.mins > 0).map(m => `<div class="entry-item" style="cursor:default;">
@@ -1345,6 +1460,103 @@ function renderReports() {
     <div style="height:20px;"></div>`;
 }
 
+// ── ADMIN DRILL — full detail for one user ──
+function renderAdminDrill() {
+  const u = state.users.find(u => u.id === state.adminDrillUser);
+  if (!u) return '<div class="empty">User not found</div>';
+
+  const now = new Date();
+  const tab = state.adminReportTab || 'month';
+  const m = state.adminReportMonth, y = state.adminReportYear;
+  const week = getWeekBounds(now);
+
+  let entries = [];
+  let periodLabel = '';
+
+  if (tab === 'week') {
+    entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d >= week.start && d <= week.end;
+    });
+    periodLabel = `${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+  } else if (tab === 'month') {
+    entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+    periodLabel = `${MONTH_NAMES[m]} ${y}`;
+  } else {
+    entries = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
+    periodLabel = `Year ${y}`;
+  }
+
+  entries.sort((a,b) => a.date.localeCompare(b.date));
+  const total = sumMins(entries);
+
+  // Group by month for year view
+  const rows = tab === 'year'
+    ? Array.from({length:12}, (_,i) => {
+        const me = entries.filter(e => parseDate(e.date).getMonth() === i);
+        if (!me.length) return '';
+        return `<div style="margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--violet);text-transform:uppercase;letter-spacing:0.5px;padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px;">
+            ${MONTH_NAMES[i]} — ${formatMins(sumMins(me))}
+          </div>
+          ${me.map(e => `<div class="entry-item" style="cursor:default;padding:7px 10px;margin-bottom:4px;">
+            <div class="flex-between">
+              <div>
+                <div class="fw-700 text-sm">${displayDate(e.date)}</div>
+                <div class="text-xs text-muted">${e.shifts.map((s,i)=>`S${i+1}: ${s.start}–${s.end}`).join(' · ')}</div>
+                ${e.note?`<div class="text-xs text-muted">${e.note}</div>`:''}
+              </div>
+              <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
+            </div>
+          </div>`).join('')}
+        </div>`;
+      }).join('')
+    : entries.map(e => `<div class="entry-item" style="cursor:default;padding:7px 10px;margin-bottom:4px;">
+        <div class="flex-between">
+          <div>
+            <div class="fw-700 text-sm">${displayDate(e.date)}</div>
+            <div class="text-xs text-muted">${e.shifts.map((s,i)=>`S${i+1}: ${s.start}–${s.end}`).join(' · ')}</div>
+            ${e.note?`<div class="text-xs text-muted">${e.note}</div>`:''}
+          </div>
+          <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
+        </div>
+      </div>`).join('');
+
+  return `
+    <div class="section-head">
+      <div>
+        <h2>${u.name}</h2>
+        <div class="sub">${periodLabel} · Detailed view</div>
+      </div>
+    </div>
+    <div class="page-pad">
+      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#EDE6FF,#FFE8EE);border-color:var(--violet-light);">
+        <div class="flex-between">
+          <div class="flex-row">
+            <div class="user-card-avatar" style="width:36px;height:36px;font-size:13px;background:${u.color}">${u.initials}</div>
+            <div>
+              <div class="fw-700 text-sm">${u.name}</div>
+              <div class="text-xs text-muted">${u.email || ''}</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div class="fw-800 text-violet" style="font-size:18px;">${formatMins(total)}</div>
+            ${(() => { const e = calcPeriodEarnings(entries, u); return e.hasRates ? `<div style="font-size:11px;color:#1A7A42;font-weight:700;">${fmtCurrency(e.total)}</div>` : ''; })()}
+            <div class="text-xs text-muted">${entries.length} day${entries.length!==1?'s':''}</div>
+          </div>
+        </div>
+      </div>
+      ${rows || `<div class="empty">${icons.clock}<p>No entries for this period</p></div>`}
+      <button class="btn btn-teal btn-full mt-4" onclick="exportDrillPDF()">${icons.download} Export PDF</button>
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
 // ── ADMIN REPORTS ──
 function renderAdminReportsInline() { return renderAdminReports(); }
 function renderAdminReports() {
@@ -1361,7 +1573,7 @@ function renderAdminReports() {
   const checkboxes = allUsers.map(u => {
     const checked = sel.includes(u.id) ? 'checked' : '';
     return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
-      <input type="checkbox" value="${u.id}" ${checked} onchange="toggleAdminUser('${u.id}',this.checked)"
+      <input type="checkbox" class="admin-user-cb" value="${u.id}" ${checked} onchange="toggleAdminUser('${u.id}',this.checked)"
         style="width:16px;height:16px;accent-color:var(--violet);flex-shrink:0;"/>
       <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;background:${u.color}">${u.initials}</div>
       <span style="font-size:13px;font-weight:600;">${u.name}</span>
@@ -1400,10 +1612,11 @@ function renderAdminReports() {
         return;
       }
       summaryRows += `<div style="margin-bottom:10px;">
-        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;">
+        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;cursor:pointer;" onclick="adminDrillInto('${u.id}')">
           <div class="flex-row">
             <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
             <span class="fw-700 text-sm">${u.name}</span>
+            <span style="font-size:9px;color:var(--text3);margin-left:4px;">▶ detail</span>
           </div>
           <span class="fw-800 text-violet">${formatMins(total)}</span>
         </div>
@@ -1436,10 +1649,11 @@ function renderAdminReports() {
         return;
       }
       summaryRows += `<div style="margin-bottom:10px;">
-        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;">
+        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;cursor:pointer;" onclick="adminDrillInto('${u.id}')">
           <div class="flex-row">
             <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
             <span class="fw-700 text-sm">${u.name}</span>
+            <span style="font-size:9px;color:var(--text3);margin-left:4px;">▶ detail</span>
           </div>
           <span class="fw-800 text-violet">${formatMins(total)}</span>
         </div>
@@ -1461,10 +1675,11 @@ function renderAdminReports() {
         return { month: i, mins: sumMins(me), days: me.length };
       }).filter(mm => mm.mins > 0);
       summaryRows += `<div style="margin-bottom:10px;">
-        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;">
+        <div class="flex-between" style="padding:6px 0;border-bottom:1.5px solid var(--violet-light);margin-bottom:4px;cursor:pointer;" onclick="adminDrillInto('${u.id}')">
           <div class="flex-row">
             <div class="user-card-avatar" style="width:28px;height:28px;font-size:10px;background:${u.color}">${u.initials}</div>
             <span class="fw-700 text-sm">${u.name}</span>
+            <span style="font-size:9px;color:var(--text3);margin-left:4px;">▶ detail</span>
           </div>
           <span class="fw-800 text-violet">${formatMins(total)}</span>
         </div>
@@ -1523,6 +1738,18 @@ function renderAdminReports() {
           <span class="fw-700 text-violet">Combined Total</span>
           <span class="fw-800" style="font-size:14px;color:var(--coral-dark);">${formatMins(grandTotal)}</span>
         </div>
+        ${(() => {
+          let totalEarnings = 0, anyRates = false, totalUnrated = 0;
+          usersToShow.forEach(u => {
+            let ue;
+            if (tab === 'week') ue = state.entries.filter(e => { if(e.user_id!==u.id)return false; const d=parseDate(e.date); return d>=week.start&&d<=week.end; });
+            else if (tab === 'month') ue = state.entries.filter(e => { if(e.user_id!==u.id)return false; const d=parseDate(e.date); return d.getMonth()===m&&d.getFullYear()===y; });
+            else ue = state.entries.filter(e => e.user_id===u.id && parseDate(e.date).getFullYear()===y);
+            const ep = calcPeriodEarnings(ue, u);
+            if (ep.hasRates) { anyRates = true; totalEarnings += ep.total; totalUnrated += ep.unrated; }
+          });
+          return anyRates ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Combined Earnings: ${fmtCurrency(totalEarnings)}${totalUnrated>0?` (${totalUnrated} unrated days)`:''}</div>` : '';
+        })()}
         <div class="text-xs text-muted mt-1">${usersToShow.length} staff selected</div>
       </div>
       ${summaryRows || `<div class="empty">${icons.users}<p>No entries found</p></div>`}
@@ -1550,7 +1777,8 @@ function renderUsers() {
       </div>
       <div class="entry-actions" style="margin-top:6px;">
         <button class="btn btn-secondary btn-sm" onclick="editUser('${u.id}')">${icons.edit} Edit</button>
-        <button class="btn btn-secondary btn-sm" onclick="adminResetPin('${u.id}')">${icons.key} Reset PIN</button>
+        <button class="btn btn-secondary btn-sm" onclick="openRates('${u.id}')">£ Rates</button>
+        <button class="btn btn-secondary btn-sm" onclick="adminResetPin('${u.id}')">${icons.key} PIN</button>
         ${u.id !== state.currentUser.id ? `<button class="btn btn-danger btn-sm" onclick="removeUser('${u.id}')">${icons.trash}</button>` : ''}
       </div>
     </div>`).join('');
@@ -1626,36 +1854,66 @@ function renderAudit() {
 // BACKUP & RESTORE SCREEN
 // ═══════════════════════════════════
 function renderBackup() {
+  const now = new Date();
   const lastBackup = state.lastBackupDate
-    ? new Date(state.lastBackupDate).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    ? (() => {
+        const d = new Date(state.lastBackupDate);
+        return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+               + ' at ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      })()
     : 'Never';
+
+  const daysSince = state.lastBackupDate
+    ? Math.floor((now - new Date(state.lastBackupDate)) / 86400000)
+    : null;
+
+  const backupStatusColor = !state.lastBackupDate ? '#D63360'
+    : daysSince > (state.backupReminderDays || 7) ? '#A05A00' : '#1A7A42';
+  const backupStatusBg = !state.lastBackupDate ? 'linear-gradient(135deg,#FFE8EE,#FFF0F3)'
+    : daysSince > (state.backupReminderDays || 7) ? 'linear-gradient(135deg,#FFF4E5,#FFF8EC)'
+    : 'linear-gradient(135deg,#E6F9EF,#E0F7FA)';
+  const backupStatusBorder = !state.lastBackupDate ? '#FFB3C6'
+    : daysSince > (state.backupReminderDays || 7) ? '#FFB347' : '#52C97E';
+
+  const stats = `${state.users.length} users · ${state.entries.length} entries · ${state.auditLog.length} audit entries`;
+
   return `
     <div class="section-head">
       <div><h2>Backup &amp; Restore</h2><div class="sub">Admin only</div></div>
     </div>
     <div class="page-pad">
-      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E6F9EF,#E0F7FA);border-color:#52C97E;">
-        <div class="fw-700 text-sm" style="color:#1A7A42;">Last backup</div>
-        <div class="text-xs text-muted mt-1">${lastBackup}</div>
+
+      <div class="card card-sm mb-4" style="background:${backupStatusBg};border-color:${backupStatusBorder};">
+        <div class="fw-700 text-sm" style="color:${backupStatusColor};">
+          ${!state.lastBackupDate ? '⚠ No backup ever made' : daysSince === 0 ? '✓ Backed up today' : `Last backup: ${lastBackup}`}
+        </div>
+        <div class="text-xs text-muted mt-1">${stats}</div>
       </div>
-      <div class="form-group mb-4">
-        <label>Backup reminder (days, 0 to disable)</label>
-        <input type="number" id="backup-days" min="0" max="365" value="${state.backupReminderDays}" style="width:100px;"/>
-        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="saveBackupSettings()">Save</button>
-      </div>
+
       <button class="btn btn-primary btn-full mb-4" onclick="exportBackup()">
         ${icons.download} Export Backup Now
       </button>
+
+      <div class="form-group mb-4" style="display:flex;align-items:flex-end;gap:10px;">
+        <div style="flex:1;">
+          <label>Backup reminder (days, 0 = off)</label>
+          <input type="number" id="backup-days" min="0" max="365" value="${state.backupReminderDays}"/>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-bottom:1px;" onclick="saveBackupSettings()">Save</button>
+      </div>
+
       <div class="card card-sm" style="background:var(--bg2);border-color:var(--border);">
-        <div class="fw-700 text-sm mb-4" style="margin-bottom:8px;color:var(--coral-dark);">⚠ Restore from Backup</div>
+        <div class="fw-700 text-sm" style="margin-bottom:6px;color:var(--coral-dark);">⚠ Restore from Backup</div>
         <div class="text-xs text-muted" style="margin-bottom:10px;line-height:1.7;">
-          This will overwrite ALL current data including Firestore. Use only to recover from a problem.
+          Overwrites ALL data in the app and Firestore. Use only to recover from a problem.
+          Export a fresh backup first if in doubt.
         </div>
         <div class="form-group" style="margin-bottom:8px;">
           <label>Select backup JSON file</label>
-          <input type="file" id="restore-file" accept=".json" style="font-size:12px;padding:4px 0;background:none;border:none;"/>
+          <input type="file" id="restore-file" accept=".json" style="font-size:12px;padding:6px 0;background:none;border:none;"/>
         </div>
-        <button class="btn btn-danger btn-full" onclick="restoreBackup()">
+        <div id="restore-progress" style="display:none;font-size:11px;color:var(--violet);margin-bottom:8px;font-weight:600;"></div>
+        <button class="btn btn-danger btn-full" id="restore-btn" onclick="restoreBackup()">
           ⚠ Restore from File
         </button>
       </div>
@@ -1694,6 +1952,18 @@ function renderConfig() {
       </div>
 
       <div class="fw-700 text-xs text-muted mb-4" style="text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 8px;">Data</div>
+      <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('freeze')">
+        <div class="flex-between">
+          <div class="flex-row">
+            ${icons.lock}
+            <div>
+              <div class="fw-700 text-sm">Year End &amp; Freeze</div>
+              <div class="text-xs text-muted">${state.freezePeriods.length} frozen period${state.freezePeriods.length!==1?'s':''}</div>
+            </div>
+          </div>
+          ${icons.chevronRight}
+        </div>
+      </div>
       <div class="card card-sm mb-4" style="cursor:pointer;" onclick="nav('backup')">
         <div class="flex-between">
           <div class="flex-row">
@@ -1798,6 +2068,98 @@ function renderSettings() {
 }
 
 // ═══════════════════════════════════
+// YEAR END & FREEZE SCREEN
+// ═══════════════════════════════════
+function renderFreeze() {
+  const ye = state.yearEndSettings || { day:5, month:4 };
+  const now = new Date();
+
+  // Calculate last and next year end dates
+  function getYearEnd(year) {
+    return new Date(year, ye.month - 1, ye.day);
+  }
+  let lastYearEnd = getYearEnd(now.getFullYear());
+  if (lastYearEnd > now) lastYearEnd = getYearEnd(now.getFullYear() - 1);
+  const nextYearEnd = new Date(lastYearEnd);
+  nextYearEnd.setFullYear(nextYearEnd.getFullYear() + 1);
+
+  const lastYearEndStr = lastYearEnd.toISOString().slice(0,10);
+  const isLastFrozen = state.freezePeriods.some(p => p.period_end === lastYearEndStr);
+
+  // Build frozen periods list
+  const frozenList = [...state.freezePeriods]
+    .sort((a,b) => b.period_end.localeCompare(a.period_end))
+    .map(p => {
+      const frozenDate = new Date(p.frozen_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+      const totalEarnings = p.earnings_snapshot
+        ? p.earnings_snapshot.reduce((a,s) => a + (s.earnings||0), 0)
+        : null;
+      return `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E6F9EF,#E0F7FA);border-color:#52C97E;">
+        <div class="flex-between" style="margin-bottom:4px;">
+          <div>
+            <span class="fw-700 text-sm">🔒 ${p.period_end}</span>
+            <span class="chip chip-green" style="margin-left:6px;font-size:9px;">Frozen</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="unfreezePeriod('${p.id}')">Unfreeze</button>
+        </div>
+        <div class="text-xs text-muted">Frozen ${frozenDate} by ${p.frozen_by}</div>
+        ${totalEarnings !== null ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Total earnings: ${fmtCurrency(totalEarnings)}</div>` : ''}
+        ${p.override_reason ? `<div class="text-xs text-muted mt-1">Override reason: ${p.override_reason}</div>` : ''}
+        ${p.earnings_snapshot ? `<div style="margin-top:6px;">${p.earnings_snapshot.map(s =>
+          `<div class="flex-between" style="font-size:11px;padding:2px 0;">
+            <span style="color:var(--text2);">${s.name}</span>
+            <span>${formatMins(s.total_mins)} ${s.earnings!==null?'· '+fmtCurrency(s.earnings):''}</span>
+          </div>`).join('')}</div>` : ''}
+      </div>`;
+    }).join('') || '<div class="text-xs text-muted mb-4">No frozen periods yet.</div>';
+
+  return `
+    <div class="section-head">
+      <div><h2>Year End &amp; Freeze</h2><div class="sub">Admin only</div></div>
+    </div>
+    <div class="page-pad">
+
+      <div class="card card-sm mb-4" style="background:var(--bg2);">
+        <div class="fw-700 text-sm mb-4" style="margin-bottom:8px;">Year End Date</div>
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Day</label>
+            <input type="number" id="ye-day" min="1" max="31" value="${ye.day}" style="text-align:center;"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Month</label>
+            <select id="ye-month">
+              ${MONTH_NAMES.map((n,i) => `<option value="${i+1}" ${ye.month===i+1?'selected':''}>${n}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-full mt-4" style="margin-top:8px;" onclick="saveYearEndSettings()">Save Year End Date</button>
+        <div class="text-xs text-muted mt-1">
+          Last year end: ${lastYearEnd.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})} ·
+          Next: ${nextYearEnd.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}
+        </div>
+      </div>
+
+      ${!isLastFrozen ? `
+      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF4E5,#FFE8EE);border-color:var(--amber);">
+        <div class="fw-700 text-sm" style="color:#A05A00;margin-bottom:6px;">⚠ Year end ${lastYearEndStr} not yet frozen</div>
+        <div class="text-xs text-muted" style="margin-bottom:10px;line-height:1.7;">
+          Freezing calculates and locks earnings for all staff up to this date.
+          Rates cannot affect frozen calculations. You can unfreeze to correct errors.
+        </div>
+        <button class="btn btn-primary btn-full" onclick="freezePeriod('${lastYearEndStr}')">
+          🔒 Freeze ${lastYearEndStr}
+        </button>
+      </div>` : ''}
+
+      <div class="fw-700 text-xs text-muted" style="text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Frozen Periods</div>
+      ${frozenList}
+
+    </div>
+    <div style="height:20px;"></div>`;
+}
+
+// ═══════════════════════════════════
 // MODALS
 // ═══════════════════════════════════
 function renderModal() {
@@ -1831,6 +2193,110 @@ function renderModal() {
         </div>
         <button class="btn btn-primary btn-full" onclick="saveUser(${isEdit?`'${d.id}'`:''})">
           ${isEdit ? icons.edit + ' Update' : icons.plus + ' Add User'}
+        </button>
+      </div>
+    </div>`;
+  }
+
+  if (modal === 'rates') {
+    const user = state.users.find(u => u.id === state.modalData.userId);
+    if (!user) return '';
+    const rates = user.rates || [];
+    const _today = new Date().toISOString().slice(0,10);
+    const rateRows = rates.map((r, i) => {
+      const isFut = r.from_date > _today;
+      return `
+      <div class="card card-sm mb-4" style="background:${isFut ? 'linear-gradient(135deg,#F0EBFF,#EDE6FF)' : 'var(--bg2)'};border-color:${isFut ? 'var(--violet-light)' : 'var(--border)'};">
+        <div class="flex-between" style="margin-bottom:6px;">
+          <div>
+            <span class="fw-700 text-sm">£${parseFloat(r.hourly_rate).toFixed(2)}/hr</span>
+            ${isFut ? `<span style="font-size:9px;background:#EDE6FF;color:var(--violet-dark);padding:1px 6px;border-radius:10px;margin-left:6px;font-weight:700;">FUTURE</span>` : ''}
+            <div class="text-xs text-muted" style="margin-top:2px;">${r.from_date} – ${r.to_date}</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-secondary btn-sm btn-icon" onclick="editRate('${user.id}',${i})">${icons.edit}</button>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="deleteRate('${user.id}',${i})">${icons.trash}</button>
+          </div>
+        </div>
+        ${r.note ? `<div class="text-xs text-muted">${r.note}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    const today = new Date().toISOString().slice(0,10);
+    const futureRates  = rates.filter(r => r.from_date > today);
+    const currentRates = rates.filter(r => r.from_date <= today);
+    const canAdd = currentRates.length < 3 || futureRates.length < 1;
+    const addForm = canAdd ? `
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;margin:12px 0 8px;">
+        ${rates.length === 0 ? 'Add First Rate' : futureRates.length === 0 ? 'Add Rate (or a future rate)' : 'Add Rate'}
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>From Date</label>
+          <input type="date" id="rate-from" onchange="onRateFromChange(this.value)"/>
+        </div>
+        <div class="form-group">
+          <label>To Date</label>
+          <input type="date" id="rate-to"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Hourly Rate (£)</label>
+        <input type="number" id="rate-amount" step="0.01" min="0.01" placeholder="e.g. 12.50"/>
+      </div>
+      <div class="form-group">
+        <label>Note (optional)</label>
+        <input type="text" id="rate-note" placeholder="e.g. April 2026 pay rise"/>
+      </div>
+      <div id="rate-error" style="color:var(--coral-dark);font-size:12px;min-height:16px;margin-bottom:8px;"></div>
+      <button class="btn btn-primary btn-full" onclick="saveRate('${user.id}')">
+        ${icons.plus} Add Rate
+      </button>` : `<div class="text-xs text-muted" style="margin-top:8px;">Maximum rates reached (3 current + 1 future). Delete one to add another.</div>`;
+
+    return `<div class="modal-overlay" onclick="closeModalOutside(event)">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Hourly Rates — ${user.name}</div>
+          <button class="modal-close" onclick="closeModal()">${icons.x}</button>
+        </div>
+        ${rateRows || '<div class="text-xs text-muted mb-4">No rates set yet</div>'}
+        ${addForm}
+      </div>
+    </div>`;
+  }
+
+  if (modal === 'edit-rate') {
+    const user = state.users.find(u => u.id === state.modalData.userId);
+    const rateIdx = state.modalData.rateIdx;
+    const rate = user && user.rates && user.rates[rateIdx];
+    if (!rate) return '';
+    return `<div class="modal-overlay" onclick="closeModalOutside(event)">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Edit Rate — ${user.name}</div>
+          <button class="modal-close" onclick="closeModal()">${icons.x}</button>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>From Date</label>
+            <input type="date" id="edit-rate-from" value="${rate.from_date}"/>
+          </div>
+          <div class="form-group">
+            <label>To Date</label>
+            <input type="date" id="edit-rate-to" value="${rate.to_date}"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Hourly Rate (£)</label>
+          <input type="number" id="edit-rate-amount" step="0.01" min="0.01" value="${rate.hourly_rate}"/>
+        </div>
+        <div class="form-group">
+          <label>Note (optional)</label>
+          <input type="text" id="edit-rate-note" value="${rate.note||''}"/>
+        </div>
+        <div id="edit-rate-error" style="color:var(--coral-dark);font-size:12px;min-height:16px;margin-bottom:8px;"></div>
+        <button class="btn btn-primary btn-full" onclick="updateRate('${user.id}',${rateIdx})">
+          ${icons.edit} Update Rate
         </button>
       </div>
     </div>`;
@@ -1910,11 +2376,21 @@ function renderProfileMenu() {
 window.nav = (screen) => {
   state.screen = screen;
   state.profileMenu = false;
-  if (screen === 'log') {
-    state.modalData = {};
-  }
+  if (screen === 'log') state.modalData = {};
   render();
+  _tsUpdateFab(screen);
 };
+
+function _tsUpdateFab(screen) {
+  const fab = document.getElementById('fab');
+  const backFab = document.getElementById('back-fab');
+  // FAB: show on home and entries, hide on log screen (it IS the log) and config screens
+  const fabScreens = ['home', 'entries'];
+  const noFabScreens = ['log', 'pin'];
+  if (fab) fab.classList.toggle('hidden', noFabScreens.includes(screen));
+  // Back FAB: show on all screens except home
+  if (backFab) backFab.classList.toggle('visible', screen !== 'home' && !!state.currentUser);
+}
 
 window.pinKey = (key) => {
   if (key === 'del') {
@@ -2061,42 +2537,56 @@ window.setAdminMonth = (m, y) => { state.adminReportMonth = m; state.adminReport
 window.setAdminReportYear2 = (y) => { state.adminReportYear = y; render(); };
 window.setAdminReportTab = (tab) => { state.adminReportTab = tab; render(); };
 window.toggleAdminUser = (uid, checked) => {
-  // Update state but DON'T re-render — avoids destroying checkbox DOM
+  // Update state array directly — checkbox handles its own visual state
   if (checked) {
     if (!state.adminSelectedUsers.includes(uid)) state.adminSelectedUsers.push(uid);
   } else {
     state.adminSelectedUsers = state.adminSelectedUsers.filter(id => id !== uid);
   }
-  // Update count badge only
+  // Update count badge only — no full re-render needed
   const badge = document.getElementById('admin-sel-count');
-  if (badge) badge.textContent = getAdminSelected().length + ' selected';
+  if (badge) {
+    const count = state.adminSelectedUsers.length === 0
+      ? state.users.filter(u => u.active).length
+      : state.adminSelectedUsers.length;
+    badge.textContent = count + ' selected';
+  }
 };
+
 window.selectAllAdminUsers = (all) => {
   const allUsers = state.users.filter(u => u.active);
   state.adminSelectedUsers = all ? allUsers.map(u => u.id) : [];
-  // Sync checkboxes without full render
-  allUsers.forEach(u => {
-    const cb = document.querySelector(`input[value="${u.id}"]`);
-    if (cb) cb.checked = all;
-  });
+  // Sync checkboxes visually without full render
+  document.querySelectorAll('.admin-user-cb').forEach(cb => { cb.checked = all; });
   const badge = document.getElementById('admin-sel-count');
-  if (badge) badge.textContent = getAdminSelected().length + ' selected';
+  if (badge) badge.textContent = (all ? allUsers.length : 0) + ' selected';
 };
+
 function getAdminSelected() {
   const allActive = state.users.filter(u => u.active);
   return state.adminSelectedUsers.length > 0
     ? allActive.filter(u => state.adminSelectedUsers.includes(u.id))
     : allActive;
 }
+
+// Apply — reads current checkbox states from DOM then re-renders report
 window.applyAdminReport = () => {
-  // Read current checkbox states from DOM before rendering
   const allUsers = state.users.filter(u => u.active);
-  const checked = allUsers.filter(u => {
-    const cb = document.querySelector(`input[value="${u.id}"]`);
-    return cb ? cb.checked : state.adminSelectedUsers.includes(u.id);
-  }).map(u => u.id);
-  state.adminSelectedUsers = checked;
+  const checked = [];
+  document.querySelectorAll('.admin-user-cb').forEach(cb => {
+    if (cb.checked) checked.push(cb.value);
+  });
+  // If DOM had no checkboxes (already re-rendered), fall back to state
+  state.adminSelectedUsers = checked.length > 0 ? checked
+    : state.adminSelectedUsers.length > 0 ? state.adminSelectedUsers
+    : allUsers.map(u => u.id);
   render();
+};
+
+// Drill into individual user detail
+window.adminDrillInto = (uid) => {
+  state.adminDrillUser = uid;
+  nav('admin-drill');
 };
 
 window.syncAllUsers = async () => {
@@ -2120,6 +2610,96 @@ window.syncAllUsers = async () => {
   }
   state.fbStatus = `Synced ${ok} of ${active.length} users to Firestore ✓`;
   showToast(`${ok} users synced to Firebase ✓`);
+  render();
+};
+
+// ── RATE ACTIONS ──
+window.openRates = (userId) => {
+  state.modal = 'rates';
+  state.modalData = { userId };
+  render();
+};
+
+window.onRateFromChange = (val) => {
+  const toEl = document.getElementById('rate-to');
+  if (toEl && val) toEl.value = autoEndDate(val);
+};
+
+window.saveRate = async (userId) => {
+  const from   = document.getElementById('rate-from').value;
+  const to     = document.getElementById('rate-to').value;
+  const amount = parseFloat(document.getElementById('rate-amount').value);
+  const note   = document.getElementById('rate-note').value.trim();
+  const errEl  = document.getElementById('rate-error');
+
+  const user = state.users.find(u => u.id === userId);
+  if (!user) return;
+  if (!user.rates) user.rates = [];
+
+  const newRate = { id: uid(), from_date: from, to_date: to, hourly_rate: amount, note };
+  const err = validateRate(newRate, user.rates, null);
+  if (err) { errEl.textContent = err; return; }
+
+  user.rates.push(newRate);
+  user.rates.sort((a,b) => a.from_date.localeCompare(b.from_date));
+
+  // Save to Firestore
+  if (!DEMO_MODE && db) {
+    try { await fbSetDoc(fbDoc(db, 'users', userId), user); }
+    catch(e) { errEl.textContent = 'Save failed: ' + e.message; user.rates.pop(); return; }
+  }
+  auditLog('RATE_ADD', `Rate added for ${user.name}: £${amount}/hr from ${from} to ${to}`);
+  showToast('Rate added');
+  state.modal = 'rates'; // re-open rates modal
+  render();
+};
+
+window.editRate = (userId, idx) => {
+  state.modal = 'edit-rate';
+  state.modalData = { userId, rateIdx: idx };
+  render();
+};
+
+window.updateRate = async (userId, idx) => {
+  const from   = document.getElementById('edit-rate-from').value;
+  const to     = document.getElementById('edit-rate-to').value;
+  const amount = parseFloat(document.getElementById('edit-rate-amount').value);
+  const note   = document.getElementById('edit-rate-note').value.trim();
+  const errEl  = document.getElementById('edit-rate-error');
+
+  const user = state.users.find(u => u.id === userId);
+  if (!user || !user.rates || !user.rates[idx]) return;
+
+  const updatedRate = { ...user.rates[idx], from_date: from, to_date: to, hourly_rate: amount, note };
+  const err = validateRate(updatedRate, user.rates, updatedRate.id);
+  if (err) { errEl.textContent = err; return; }
+
+  const before = { ...user.rates[idx] };
+  user.rates[idx] = updatedRate;
+  user.rates.sort((a,b) => a.from_date.localeCompare(b.from_date));
+
+  if (!DEMO_MODE && db) {
+    try { await fbSetDoc(fbDoc(db, 'users', userId), user); }
+    catch(e) { errEl.textContent = 'Save failed: ' + e.message; user.rates[idx] = before; return; }
+  }
+  auditLog('RATE_EDIT', `Rate updated for ${user.name}: £${amount}/hr from ${from} to ${to}`, before, updatedRate);
+  showToast('Rate updated');
+  state.modal = 'rates';
+  render();
+};
+
+window.deleteRate = async (userId, idx) => {
+  if (!confirm('Delete this rate?')) return;
+  const user = state.users.find(u => u.id === userId);
+  if (!user || !user.rates) return;
+  const removed = user.rates.splice(idx, 1)[0];
+  if (!DEMO_MODE && db) {
+    try { await fbSetDoc(fbDoc(db, 'users', userId), user); }
+    catch(e) { showToast('Delete failed: ' + e.message); user.rates.splice(idx, 0, removed); return; }
+  }
+  auditLog('RATE_DELETE', `Rate deleted for ${user.name}: £${removed.hourly_rate}/hr from ${removed.from_date}`);
+  showToast('Rate deleted');
+  state.modal = 'rates';
   render();
 };
 
@@ -2168,7 +2748,7 @@ window.saveUser = async (id) => {
     const pinEl = document.getElementById('u-pin');
     const pin = pinEl ? pinEl.value : '0000';
     if (pin.length !== 4 || !/^\d{4}$/.test(pin)) { showToast('PIN must be 4 digits'); return; }
-    if (state.users.find(u => u.pin === pin && u.active)) { showToast('PIN already in use'); return; }
+    if (state.users.find(u => u.pin === pin && u.active)) { showToast('Invalid PIN — please choose another'); return; }
     const newId = 'u' + Date.now();
     const newUser = {
       id: newId, name, role, pin, phone, email, address, city, postcode,
@@ -2219,7 +2799,7 @@ window.doAdminResetPin = async (uid) => {
     return;
   }
   if (state.users.find(u => u.id !== uid && u.pin === pin)) {
-    document.getElementById('reset-pin-error').textContent = 'PIN already in use';
+    document.getElementById('reset-pin-error').textContent = 'Invalid PIN — please choose another';
     return;
   }
   const idx = state.users.findIndex(u => u.id === uid);
@@ -2247,7 +2827,7 @@ window.doChangePin = async () => {
   if (!/^\d{4}$/.test(newPin)) { errEl.textContent = 'New PIN must be 4 digits'; return; }
   if (newPin !== confirm2) { errEl.textContent = 'PINs do not match'; return; }
   if (state.users.find(u => u.id !== state.currentUser.id && u.pin === newPin)) {
-    errEl.textContent = 'PIN already in use'; return;
+    errEl.textContent = 'Invalid PIN — please choose another'; return;
   }
   const idx = state.users.findIndex(u => u.id === state.currentUser.id);
   if (idx >= 0) {
@@ -2276,18 +2856,7 @@ window.exportPDF = (type) => {
   const now = new Date();
   const m = state.reportMonth, y = state.reportYear;
 
-  // Header
-  doc.setFillColor(124, 92, 191);
-  doc.rect(0, 0, 210, 28, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('TimeShift', 14, 14);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-
   let title = '', entries = [];
-
   if (type === 'week') {
     const week = getWeekBounds(now);
     title = `Week: ${week.start.toLocaleDateString('en-GB')} – ${week.end.toLocaleDateString('en-GB')}`;
@@ -2309,94 +2878,241 @@ window.exportPDF = (type) => {
       .sort((a,b)=>a.date.localeCompare(b.date));
   }
 
-  doc.text(`${title} · ${u.name} · Generated ${now.toLocaleDateString('en-GB')}`, 14, 22);
+  const total = sumMins(entries);
+  const ep = calcPeriodEarnings(entries, u);
+
+  // Header
+  doc.setFillColor(124, 92, 191);
+  doc.rect(0, 0, 210, 22, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(14); doc.setFont('helvetica','bold');
+  doc.text('TimeShift', 14, 10);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text(`${title} · ${u.name} · Generated ${now.toLocaleDateString('en-GB')}`, 14, 18);
   doc.setTextColor(0,0,0);
 
-  const total = sumMins(entries);
-  const h = Math.floor(total/60), mins = total%60;
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica','bold');
-  doc.text(`Total: ${h}h ${mins}m`, 14, 36);
+  // Summary block
+  doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text(`Total Hours: ${formatMins(total)}`, 14, 32);
+  if (ep.hasRates) {
+    doc.setTextColor(27,122,66);
+    doc.text(`Earnings: ${fmtCurrency(ep.total)}${ep.unrated > 0 ? ` (${ep.unrated} day${ep.unrated!==1?'s':''} unrated)` : ''}`, 14, 39);
+    doc.setTextColor(0,0,0);
+  }
   doc.setFont('helvetica','normal');
-  doc.setFontSize(10);
-  doc.text(`${entries.length} days worked`, 14, 42);
+  doc.setFontSize(9);
+  doc.text(`${entries.length} days worked`, 14, ep.hasRates ? 46 : 39);
 
+  const hasEarnings = ep.hasRates;
   doc.autoTable({
-    startY: 48,
-    head: [['Date','Shift 1','Shift 2','Shift 3','Total','Note']],
-    body: entries.map(e => [
-      displayDate(e.date),
-      e.shifts[0] ? `${e.shifts[0].start}–${e.shifts[0].end}` : '',
-      e.shifts[1] ? `${e.shifts[1].start}–${e.shifts[1].end}` : '',
-      e.shifts[2] ? `${e.shifts[2].start}–${e.shifts[2].end}` : '',
-      formatMins(e.total_mins),
-      e.note || ''
-    ]),
-    headStyles: { fillColor: [255,107,138], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [253,245,255] },
-    styles: { fontSize: 9 },
+    startY: hasEarnings ? 52 : 45,
+    head: [['Date','Shift 1','Shift 2','Shift 3','Hours', ...(hasEarnings ? ['Earnings'] : []),'Note']],
+    body: entries.map(e => {
+      const rate = getRateForDate(u, e.date);
+      const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '—';
+      return [
+        displayDate(e.date),
+        e.shifts[0] ? `${e.shifts[0].start}–${e.shifts[0].end}` : '',
+        e.shifts[1] ? `${e.shifts[1].start}–${e.shifts[1].end}` : '',
+        e.shifts[2] ? `${e.shifts[2].start}–${e.shifts[2].end}` : '',
+        formatMins(e.total_mins),
+        ...(hasEarnings ? [earn] : []),
+        e.note || ''
+      ];
+    }),
+    headStyles: { fillColor:[255,107,138], textColor:255, fontStyle:'bold', fontSize:8 },
+    alternateRowStyles: { fillColor:[253,245,255] },
+    styles: { fontSize:8 },
+    columnStyles: hasEarnings ? { 5:{textColor:[27,122,66],fontStyle:'bold'} } : {}
   });
 
-  doc.save(`TimeShift_${u.name.replace(' ','_')}_${title.replace(' ','_')}.pdf`);
+  doc.save(`TimeShift_${u.name.replace(/\s+/g,'_')}_${title.replace(/\s+/g,'_')}.pdf`);
+  auditLog('PDF_EXPORT', `${type} PDF: ${u.name} · ${title}`);
+  showToast('PDF exported');
+};
+
+window.exportDrillPDF = () => {
+  const u = state.users.find(u => u.id === state.adminDrillUser);
+  if (!u) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const now = new Date();
+  const tab = state.adminReportTab || 'month';
+  const m = state.adminReportMonth, y = state.adminReportYear;
+  const week = getWeekBounds(now);
+
+  let entries = [], periodLabel = '';
+  if (tab === 'week') {
+    entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d >= week.start && d <= week.end;
+    });
+    periodLabel = `Week ${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}–${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+  } else if (tab === 'month') {
+    entries = state.entries.filter(e => {
+      if (e.user_id !== u.id) return false;
+      const d = parseDate(e.date);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+    periodLabel = `${MONTH_NAMES[m]} ${y}`;
+  } else {
+    entries = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
+    periodLabel = `Year ${y}`;
+  }
+  entries.sort((a,b) => a.date.localeCompare(b.date));
+
+  doc.setFillColor(124,92,191);
+  doc.rect(0,0,210,22,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(14); doc.setFont('helvetica','bold');
+  doc.text(`TimeShift — ${u.name}`, 14, 10);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text(`${periodLabel} · ${formatMins(sumMins(entries))} · ${entries.length} days · Generated ${now.toLocaleDateString('en-GB')}`, 14, 18);
+  doc.setTextColor(0,0,0);
+
+  const ep = calcPeriodEarnings(entries, u);
+  const hasEarnings = ep.hasRates;
+
+  // Summary line below header
+  doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.setTextColor(0,0,0);
+  doc.text(`Hours: ${formatMins(sumMins(entries))}  ·  Days: ${entries.length}`, 14, 28);
+  if (hasEarnings) {
+    doc.setTextColor(27,122,66);
+    doc.text(`Earnings: ${fmtCurrency(ep.total)}${ep.unrated>0?` (${ep.unrated} unrated)`:''}`, 14, 35);
+    doc.setTextColor(0,0,0);
+  }
+
+  doc.autoTable({
+    startY: hasEarnings ? 41 : 34,
+    head: [['Date','Shift 1','Shift 2','Shift 3','Hours', ...(hasEarnings?['Earnings']:[]),'Note']],
+    body: entries.map(e => {
+      const rate = getRateForDate(u, e.date);
+      const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '—';
+      return [
+        displayDate(e.date),
+        e.shifts[0]?`${e.shifts[0].start}–${e.shifts[0].end}`:'',
+        e.shifts[1]?`${e.shifts[1].start}–${e.shifts[1].end}`:'',
+        e.shifts[2]?`${e.shifts[2].start}–${e.shifts[2].end}`:'',
+        formatMins(e.total_mins),
+        ...(hasEarnings?[earn]:[]),
+        e.note||''
+      ];
+    }),
+    headStyles:{fillColor:[255,107,138],textColor:255,fontSize:8},
+    alternateRowStyles:{fillColor:[253,245,255]},
+    styles:{fontSize:8,cellPadding:2},
+    columnStyles: hasEarnings ? { 5:{textColor:[27,122,66],fontStyle:'bold'} } : {},
+    margin:{left:14,right:14}
+  });
+
+  doc.save(`TimeShift_${u.name.replace(/\s+/g,'_')}_${periodLabel.replace(/\s+/g,'_')}.pdf`);
+  auditLog('ADMIN_DRILL_PDF', `Detail PDF: ${u.name} · ${periodLabel}`);
   showToast('PDF exported');
 };
 
 window.exportAdminPDF = () => {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
   const m = state.adminReportMonth, y = state.adminReportYear;
-  const targetUid = state.adminReportUser;
+  const tab = state.adminReportTab || 'month';
   const now = new Date();
+  const week = getWeekBounds(now);
+  const allActive = state.users.filter(u => u.active);
+  const sel = state.adminSelectedUsers.length > 0 ? state.adminSelectedUsers : allActive.map(u => u.id);
+  const usersToShow = allActive.filter(u => sel.includes(u.id));
+  const period = tab === 'week'
+    ? `Week ${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}–${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`
+    : tab === 'month' ? `${MONTH_NAMES[m]} ${y}` : `Year ${y}`;
 
-  doc.setFillColor(124, 92, 191);
-  doc.rect(0, 0, 210, 28, 'F');
+  doc.setFillColor(124,92,191);
+  doc.rect(0,0,210,22,'F');
   doc.setTextColor(255,255,255);
-  doc.setFontSize(18);
-  doc.setFont('helvetica','bold');
-  doc.text('TimeShift — Admin Report', 14, 14);
-  doc.setFontSize(10);
-  doc.setFont('helvetica','normal');
-  doc.text(`${MONTH_NAMES[m]} ${y} · Generated ${now.toLocaleDateString('en-GB')}`, 14, 22);
+  doc.setFontSize(14); doc.setFont('helvetica','bold');
+  doc.text('TimeShift — Staff Report', 14, 10);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text(`${period} · ${usersToShow.length} staff · Generated ${now.toLocaleDateString('en-GB')}`, 14, 18);
   doc.setTextColor(0,0,0);
 
-  const usersToShow = targetUid === 'all' ? state.users.filter(u=>u.active) : state.users.filter(u=>u.id===targetUid);
+  let startY = 28;
+  let grandHours = 0, grandEarnings = 0, anyEarnings = false;
 
-  let startY = 36;
   usersToShow.forEach(u => {
-    const ue = state.entries.filter(e => {
-      if (e.user_id !== u.id) return false;
-      const d = parseDate(e.date);
-      return d.getMonth() === m && d.getFullYear() === y;
-    }).sort((a,b)=>a.date.localeCompare(b.date));
+    let ue;
+    if (tab === 'week') {
+      ue = state.entries.filter(e => {
+        if (e.user_id !== u.id) return false;
+        const d = parseDate(e.date);
+        return d >= week.start && d <= week.end;
+      });
+    } else if (tab === 'month') {
+      ue = state.entries.filter(e => {
+        if (e.user_id !== u.id) return false;
+        const d = parseDate(e.date);
+        return d.getMonth() === m && d.getFullYear() === y;
+      });
+    } else {
+      ue = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
+    }
+    ue.sort((a,b) => a.date.localeCompare(b.date));
 
     const total = sumMins(ue);
-    doc.setFontSize(12);
-    doc.setFont('helvetica','bold');
-    doc.text(`${u.name} (${u.role}) — Total: ${formatMins(total)} · ${ue.length} days`, 14, startY);
-    doc.setFont('helvetica','normal');
-    startY += 4;
+    grandHours += total;
+    const ep = calcPeriodEarnings(ue, u);
+    if (ep.hasRates) { anyEarnings = true; grandEarnings += ep.total; }
 
-    doc.autoTable({
-      startY,
-      head: [['Date','Shifts','Total','Note']],
-      body: ue.map(e => [
-        displayDate(e.date),
-        e.shifts.map(s=>`${s.start}–${s.end}`).join(', '),
-        formatMins(e.total_mins),
-        e.note || ''
-      ]),
-      headStyles: { fillColor: [255,107,138], textColor:255 },
-      alternateRowStyles: { fillColor: [253,245,255] },
-      styles: { fontSize: 8 },
-      margin: { left: 14, right: 14 }
-    });
+    if (startY > 240) { doc.addPage(); startY = 16; }
 
-    startY = doc.lastAutoTable.finalY + 10;
+    doc.setFontSize(10); doc.setFont('helvetica','bold');
+    doc.setTextColor(124,92,191);
+    const earnStr = ep.hasRates ? `  ·  ${fmtCurrency(ep.total)}` : '';
+    doc.text(`${u.name}  —  ${formatMins(total)}${earnStr}  (${ue.length} day${ue.length!==1?'s':''})`, 14, startY);
+    doc.setTextColor(0,0,0);
+    startY += 3;
+
+    if (ue.length) {
+      const hasE = ep.hasRates;
+      doc.autoTable({
+        startY,
+        head: [['Date','Shift 1','Shift 2','Shift 3','Hours', ...(hasE?['Earnings']:[]),'Note']],
+        body: ue.map(e => {
+          const rate = getRateForDate(u, e.date);
+          const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '—';
+          return [
+            displayDate(e.date),
+            e.shifts[0]?`${e.shifts[0].start}–${e.shifts[0].end}`:'',
+            e.shifts[1]?`${e.shifts[1].start}–${e.shifts[1].end}`:'',
+            e.shifts[2]?`${e.shifts[2].start}–${e.shifts[2].end}`:'',
+            formatMins(e.total_mins),
+            ...(hasE?[earn]:[]),
+            e.note||''
+          ];
+        }),
+        headStyles:{fillColor:[255,107,138],textColor:255,fontSize:7},
+        alternateRowStyles:{fillColor:[253,245,255]},
+        styles:{fontSize:7,cellPadding:2},
+        columnStyles: hasE ? { 5:{textColor:[27,122,66],fontStyle:'bold'} } : {},
+        margin:{left:14,right:14}
+      });
+      startY = doc.lastAutoTable.finalY + 8;
+    } else {
+      doc.setFontSize(8); doc.setTextColor(150,150,150);
+      doc.text('No entries for this period', 18, startY+4);
+      doc.setTextColor(0,0,0);
+      startY += 10;
+    }
   });
 
-  doc.save(`TimeShift_Admin_${MONTH_SHORT[m]}${y}.pdf`);
-  showToast('Admin PDF exported');
+  // Grand totals footer
+  if (startY > 260) { doc.addPage(); startY = 16; }
+  doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.setTextColor(124,92,191);
+  doc.text(`Combined Total: ${formatMins(grandHours)}${anyEarnings ? '  ·  ' + fmtCurrency(grandEarnings) : ''}`, 14, startY + 6);
+
+  doc.save(`TimeShift_Staff_${period.replace(/[^a-zA-Z0-9]/g,'_')}.pdf`);
+  auditLog('ADMIN_PDF_EXPORT', `Staff PDF: ${period} · ${usersToShow.length} staff`);
+  showToast('PDF exported');
 };
 
 // ═══════════════════════════════════
@@ -2442,6 +3158,8 @@ function render() {
     case 'audit': screenContent = renderAudit(); break;
     case 'backup': screenContent = renderBackup(); break;
     case 'config': screenContent = renderConfig(); break;
+    case 'admin-drill': screenContent = renderAdminDrill(); break;
+    case 'freeze': screenContent = renderFreeze(); break;
     default: screenContent = renderHome();
   }
 
@@ -2453,6 +3171,8 @@ function render() {
     ${renderProfileMenu()}
     ${state.toast ? `<div class="toast">${state.toast}</div>` : ''}
   `;
+  // Sync FAB and back button visibility after every render
+  _tsUpdateFab(state.screen);
 }
 
 // ═══════════════════════════════════
@@ -2522,14 +3242,19 @@ async function loadFirebaseData() {
   // This ensures all users always see up-to-date data.
   if (!db) return;
   try {
-    const [uSnap, eSnap, aSnap] = await Promise.all([
+    const [uSnap, eSnap, aSnap, fpSnap, yeSnap] = await Promise.all([
       fbGetDocs(fbCollection(db, 'users')),
       fbGetDocs(fbCollection(db, 'entries')),
-      fbGetDocs(fbCollection(db, 'audit'))
+      fbGetDocs(fbCollection(db, 'audit')),
+      fbGetDocs(fbCollection(db, 'freezePeriods')),
+      fbGetDocs(fbCollection(db, 'settings'))
     ]);
-    state.users    = uSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.active !== false);
-    state.entries  = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    state.auditLog = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.users         = uSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.active !== false);
+    state.entries       = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.auditLog      = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.freezePeriods = fpSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const yeDoc = yeSnap.docs.find(d => d.id === 'yearEnd');
+    if (yeDoc) state.yearEndSettings = yeDoc.data();
     state.loading  = false;
     console.log('Loaded from Firebase:', state.users.length, 'users,', state.entries.length, 'entries,', state.auditLog.length, 'audit entries');
   } catch(e) {
@@ -2547,21 +3272,120 @@ async function loadFirebaseData() {
 // ═══════════════════════════════════
 
 // ═══════════════════════════════════
+// YEAR END & FREEZE ACTIONS
+// ═══════════════════════════════════
+window.saveYearEndSettings = async function() {
+  const day   = parseInt(document.getElementById('ye-day').value);
+  const month = parseInt(document.getElementById('ye-month').value);
+  if (!day || day < 1 || day > 31 || !month) { showToast('Invalid date'); return; }
+  state.yearEndSettings = { day, month };
+  // Persist to Firestore as a settings doc
+  if (!DEMO_MODE && db) {
+    try { await fbSetDoc(fbDoc(db, 'settings', 'yearEnd'), { day, month }); }
+    catch(e) { showToast('Save failed: ' + e.message); return; }
+  }
+  auditLog('YEAR_END_SETTINGS', `Year end set to ${day}/${month}`);
+  showToast('Year end date saved');
+  render();
+};
+
+window.freezePeriod = async function(periodEnd) {
+  if (!confirm(`Freeze earnings up to ${periodEnd}?
+
+This calculates a permanent snapshot for all staff. You can unfreeze later to correct errors.`)) return;
+
+  const activeUsers = state.users.filter(u => u.active);
+  const snapshot = activeUsers.map(u => {
+    const ue = state.entries.filter(e => e.user_id === u.id && e.date <= periodEnd);
+    const totalMins = sumMins(ue);
+    const ep = calcPeriodEarnings(ue, u);
+    return {
+      user_id: u.id,
+      name: u.name,
+      total_mins: totalMins,
+      earnings: ep.hasRates ? ep.total : null,
+      unrated_days: ep.unrated || 0
+    };
+  });
+
+  const period = {
+    id: uid(),
+    period_end: periodEnd,
+    frozen_at: tsNow(),
+    frozen_by: state.currentUser.name,
+    earnings_snapshot: snapshot,
+    notes: '',
+    overridden: false,
+    override_reason: ''
+  };
+
+  state.freezePeriods.push(period);
+
+  if (!DEMO_MODE && db) {
+    try { await fbSetDoc(fbDoc(db, 'freezePeriods', period.id), period); }
+    catch(e) {
+      state.freezePeriods.pop();
+      showToast('Freeze failed: ' + e.message); return;
+    }
+  }
+  auditLog('PERIOD_FROZEN', `Period frozen: ${periodEnd} by ${state.currentUser.name}`);
+  showToast(`Period ${periodEnd} frozen ✓`);
+  render();
+};
+
+window.unfreezePeriod = async function(id) {
+  const reason = prompt('Enter reason for unfreezing this period:
+(This will be recorded in the audit trail)');
+  if (reason === null) return; // cancelled
+  if (!reason.trim()) { showToast('A reason is required'); return; }
+
+  const idx = state.freezePeriods.findIndex(p => p.id === id);
+  if (idx < 0) return;
+
+  state.freezePeriods[idx].overridden = true;
+  state.freezePeriods[idx].override_reason = reason.trim();
+  state.freezePeriods.splice(idx, 1);
+
+  if (!DEMO_MODE && db) {
+    try { await fbDeleteDoc(fbDoc(db, 'freezePeriods', id)); }
+    catch(e) { showToast('Unfreeze failed: ' + e.message); return; }
+  }
+  auditLog('PERIOD_UNFROZEN', `Period unfrozen: reason — ${reason.trim()}`, null, { id });
+  showToast('Period unfrozen — recalculate and refreeze when ready');
+  render();
+};
+
+// ═══════════════════════════════════
 // BACKUP & RESTORE
 // ═══════════════════════════════════
-window.exportBackup = function() {
+window.exportBackup = async function() {
   const now = new Date();
   const pad = (n,w) => String(n).padStart(w,'0');
   const ts = pad(now.getFullYear(),4)+pad(now.getMonth()+1,2)+pad(now.getDate(),2)
            + '-'+pad(now.getHours(),2)+pad(now.getMinutes(),2)+pad(now.getSeconds(),2);
   const filename = `timeshift-backup-${ts}.json`;
+
+  // Fetch ALL users from Firestore (including inactive) for complete backup
+  let allUsers = state.users;
+  if (!DEMO_MODE && db) {
+    try {
+      const uSnap = await fbGetDocs(fbCollection(db, 'users'));
+      allUsers = uSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) {
+      console.warn('Could not fetch all users for backup:', e.message);
+    }
+  }
+
   const data = {
     version: APP_VERSION,
     exportedAt: now.toISOString(),
-    users: state.users,
+    users: allUsers,
     entries: state.entries,
     auditLog: state.auditLog,
-    backupReminderDays: state.backupReminderDays
+    freezePeriods: state.freezePeriods,
+    yearEndSettings: state.yearEndSettings,
+    backupReminderDays: state.backupReminderDays,
+    lastBackupDate: now.toISOString()
   };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}));
@@ -2569,7 +3393,7 @@ window.exportBackup = function() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
   state.lastBackupDate = now.toISOString();
   saveBackupPrefs();
-  auditLog('BACKUP_EXPORT', `Backup exported: ${filename}`);
+  auditLog('BACKUP_EXPORT', `Backup exported: ${filename} — ${allUsers.length} users, ${state.entries.length} entries`);
   showToast('Backup exported ✓');
   render();
 };
@@ -2577,38 +3401,80 @@ window.exportBackup = function() {
 window.restoreBackup = async function() {
   const fi = document.getElementById('restore-file');
   if (!fi || !fi.files || !fi.files.length) { showToast('Please select a backup file first'); return; }
-  const confirm1 = prompt('WARNING: This will overwrite ALL data including Firestore.\nType CONFIRM to proceed:');
+
+  // Validate file first
+  let restored;
+  try {
+    const text = await fi.files[0].text();
+    restored = JSON.parse(text);
+  } catch(e) {
+    showToast('Cannot read file — is it a valid JSON backup?'); return;
+  }
+
+  // Validate structure
+  if (!restored.users || !Array.isArray(restored.users) ||
+      !restored.entries || !Array.isArray(restored.entries)) {
+    showToast('Invalid backup file — missing users or entries'); return;
+  }
+
+  const fileDate = restored.exportedAt
+    ? new Date(restored.exportedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    : 'unknown date';
+
+  const confirm1 = prompt(
+    `RESTORE BACKUP
+
+File: ${fi.files[0].name}
+Created: ${fileDate}
+Contains: ${restored.users.length} users, ${restored.entries.length} entries
+
+This will OVERWRITE all current data in the app and Firestore.
+
+Type CONFIRM to proceed:`
+  );
   if (confirm1 !== 'CONFIRM') { showToast('Restore cancelled'); return; }
 
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    try {
-      const restored = JSON.parse(e.target.result);
-      if (!restored.users || !restored.entries) { showToast('Invalid backup file'); return; }
+  const progressEl = document.getElementById('restore-progress');
+  const btnEl = document.getElementById('restore-btn');
+  const setProgress = (msg) => { if (progressEl) { progressEl.style.display=''; progressEl.textContent = msg; } };
+  if (btnEl) btnEl.disabled = true;
 
-      // Restore to state
-      state.users    = restored.users    || [];
-      state.entries  = restored.entries  || [];
-      state.auditLog = restored.auditLog || [];
-      state.backupReminderDays = (restored.backupReminderDays !== undefined) ? restored.backupReminderDays : 7;
+  try {
+    // Restore to state
+    state.users    = restored.users    || [];
+    state.entries  = restored.entries  || [];
+    state.auditLog = restored.auditLog || [];
+    state.backupReminderDays = (restored.backupReminderDays !== undefined) ? restored.backupReminderDays : 7;
+    if (restored.lastBackupDate) state.lastBackupDate = restored.lastBackupDate;
+    saveBackupPrefs();
 
-      // Write everything back to Firestore
-      if (!DEMO_MODE && db) {
-        showToast('Restoring to Firebase…');
-        const writes = [];
-        state.users.forEach(u   => writes.push(fbSetDoc(fbDoc(db,'users',u.id), u)));
-        state.entries.forEach(en => writes.push(fbSetDoc(fbDoc(db,'entries',en.id), en)));
-        state.auditLog.forEach(a => writes.push(fbSetDoc(fbDoc(db,'audit',a.id), a)));
-        await Promise.all(writes);
+    // Write to Firestore in batches of 20 to avoid rate limits
+    if (!DEMO_MODE && db) {
+      const BATCH = 20;
+      const allWrites = [
+        ...state.users.map(u    => ({ col:'users',   id:u.id,  data:u  })),
+        ...state.entries.map(en => ({ col:'entries', id:en.id, data:en })),
+        ...state.auditLog.map(a => ({ col:'audit',   id:a.id,  data:a  })),
+      ];
+      const total = allWrites.length;
+      let done = 0;
+      for (let i = 0; i < allWrites.length; i += BATCH) {
+        const batch = allWrites.slice(i, i + BATCH);
+        await Promise.all(batch.map(w => fbSetDoc(fbDoc(db, w.col, w.id), w.data)));
+        done += batch.length;
+        setProgress(`Restoring… ${done} of ${total} records`);
       }
-      auditLog('BACKUP_RESTORE', 'Data restored from backup file');
-      showToast('Restore complete ✓');
-      render();
-    } catch(err) {
-      showToast('Restore failed: ' + err.message);
     }
-  };
-  reader.readAsText(fi.files[0]);
+
+    auditLog('BACKUP_RESTORE', `Data restored from backup: ${fi.files[0].name}`);
+    setProgress('Restore complete ✓');
+    showToast('Restore complete ✓');
+    setTimeout(() => render(), 1500);
+  } catch(err) {
+    if (btnEl) btnEl.disabled = false;
+    setProgress('Restore failed: ' + err.message);
+    showToast('Restore failed: ' + err.message);
+  }
 };
 
 window.saveBackupSettings = function() {
@@ -2633,6 +3499,24 @@ function loadBackupPrefs() {
     if (saved.lastBackupDate) state.lastBackupDate = saved.lastBackupDate;
     if (saved.backupReminderDays !== undefined) state.backupReminderDays = saved.backupReminderDays;
   } catch(e) {}
+}
+
+function checkYearEndReminder() {
+  const ye = state.yearEndSettings || { day:5, month:4 };
+  const now = new Date();
+  function getYearEnd(year) { return new Date(year, ye.month - 1, ye.day); }
+  let lastYearEnd = getYearEnd(now.getFullYear());
+  if (lastYearEnd > now) lastYearEnd = getYearEnd(now.getFullYear() - 1);
+  const lastYearEndStr = lastYearEnd.toISOString().slice(0,10);
+  const isLastFrozen = state.freezePeriods.some(p => p.period_end === lastYearEndStr);
+  if (!isLastFrozen && lastYearEnd < now) {
+    if (confirm(`Year end ${lastYearEndStr} has passed and earnings are not yet frozen.
+
+Go to Year End & Freeze now?`)) {
+      nav('config');
+      setTimeout(() => nav('freeze'), 100);
+    }
+  }
 }
 
 function checkBackupReminder() {
@@ -2699,6 +3583,65 @@ window.exitApp = function() {
     logout();
   }
 };
+
+// Back FAB handler — go back logically
+window.handleBackFab = function() {
+  const screen = state.screen;
+  // Config sub-screens go back to config
+  if (['users','audit','backup','settings','freeze'].includes(screen)) {
+    nav('config');
+  } else if (screen === 'admin-drill') {
+    nav('reports');
+  } else {
+    nav('home');
+  }
+};
+
+// ── Android hardware back button — double press to exit ──
+(function() {
+  let _exitWarned = false;
+  let _exitTimer = null;
+  let _exitReady = false;
+
+  // Push one buffer state
+  history.pushState(null, '', location.href);
+
+  window.addEventListener('popstate', function() {
+    if (_exitReady) return; // clean exit
+
+    // Maintain buffer
+    history.replaceState(null, '', location.href);
+
+    // If logged in and not on home — go back instead of exit
+    if (state.currentUser && state.screen !== 'home') {
+      handleBackFab();
+      return;
+    }
+
+    if (_exitWarned) {
+      // Second press within 2.5s — exit
+      _exitWarned = false;
+      if (_exitTimer) { clearTimeout(_exitTimer); _exitTimer = null; }
+      const t = document.getElementById('exit-toast');
+      if (t) t.style.display = 'none';
+      _exitReady = true;
+      logout();
+      return;
+    }
+
+    // First press — show toast
+    _exitWarned = true;
+    const t = document.getElementById('exit-toast');
+    if (t) t.style.display = 'block';
+    if (_exitTimer) clearTimeout(_exitTimer);
+    _exitTimer = setTimeout(function() {
+      _exitWarned = false;
+      _exitTimer = null;
+      const t = document.getElementById('exit-toast');
+      if (t) t.style.display = 'none';
+    }, 2500);
+  });
+})();
 
 window.addEventListener('online',  () => { state.online = true;  render(); });
 window.addEventListener('offline', () => { state.online = false; render(); });
