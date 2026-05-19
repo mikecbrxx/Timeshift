@@ -521,7 +521,8 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);">Connecting…</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.3</div>
+  <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Connecting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
     <div style="width:8px;height:8px;border-radius:50%;background:#FF6B8A;animation:ts-spin 1.2s ease-in-out infinite;"></div>
@@ -564,7 +565,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '4.2';
+const APP_VERSION = '4.3';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -645,9 +646,21 @@ let fbCollection, fbDoc, fbGetDocs, fbSetDoc, fbUpdateDoc, fbDeleteDoc;
 async function initFirebase() {
   const cfg = getFirebaseConfig();
   if (!cfg) { DEMO_MODE = true; return; }
+
+  // Wrap SDK imports in a timeout — dynamic import can hang on slow networks
+  function importWithTimeout(url, ms) {
+    return Promise.race([
+      import(url),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SDK load timed out: ' + url)), ms))
+    ]);
+  }
+
   try {
-    const { initializeApp, getApps, getApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const fs = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    _tsSetMsg('Loading Firebase SDK…');
+    const [{ initializeApp, getApps, getApp }, fs] = await Promise.all([
+      importWithTimeout('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js', 12000),
+      importWithTimeout('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js', 12000)
+    ]);
 
     // Assign all Firestore helpers FIRST
     fbCollection = fs.collection;
@@ -657,6 +670,7 @@ async function initFirebase() {
     fbUpdateDoc  = fs.updateDoc;
     fbDeleteDoc  = fs.deleteDoc;
 
+    _tsSetMsg('Initialising database…');
     // Safely initialise — reuse existing app if already initialised
     try {
       fbApp = getApp();
@@ -667,14 +681,14 @@ async function initFirebase() {
 
     DEMO_MODE = false;
     state.fbStatus = 'Connected to Firebase ✓';
-    console.log('Firebase OK, db:', !!db);
+    console.log('Firebase OK');
   } catch(e) {
     DEMO_MODE = true;
     db = null;
     state.fbStatus = 'Firebase error: ' + e.message;
-    console.error('Firebase init error:', e);
-    // Don't show toast here — will show on boot screen briefly, show after load instead
     state.firebaseError = e.message;
+    console.error('Firebase init error:', e);
+    throw e; // re-throw so _tsRunStartup catches it and shows blocked screen
   }
 }
 
@@ -3669,6 +3683,7 @@ async function _tsRunStartup() {
 
   // Step 2 — Initialise Firebase
   _tsSetMsg('Connecting to Firebase…');
+  // (initFirebase will update the message itself as it progresses)
   let initTimeout = null;
   const timeoutPromise = new Promise((_, reject) => {
     initTimeout = setTimeout(() => reject(new Error('Connection timed out')), TIMEOUT_MS);
@@ -3690,7 +3705,7 @@ async function _tsRunStartup() {
   }
 
   // Step 3 — Load data from Firestore
-  _tsSetMsg('Loading data…');
+  _tsSetMsg('Loading your data…');
   try {
     await Promise.race([
       loadFirebaseData(),
