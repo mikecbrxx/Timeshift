@@ -538,7 +538,7 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v5.3</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v5.4</div>
   <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Starting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
@@ -558,7 +558,16 @@
 <div id="print-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;z-index:9999;overflow-y:auto;padding:16px;color:#111;font-family:Arial,sans-serif;">
   <div id="print-content"></div>
   <div id="print-buttons" style="margin-top:20px;display:flex;gap:10px;">
-    <button onclick="window.print()" style="background:linear-gradient(135deg,#7C5CBF,#5E3FA3);color:white;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;flex:1;">🖨 Print / Save as PDF</button>
+    <button onclick="isIOS() ? closePrintOverlay() : window.print()" style="background:linear-gradient(135deg,#7C5CBF,#5E3FA3);color:white;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;flex:1;" id="print-btn">🖨 Print / Save as PDF</button>
+<script>
+  // On iOS, hide print overlay button (jsPDF used instead — this overlay won't show)
+  document.addEventListener('DOMContentLoaded', function() {
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+      var btn = document.getElementById('print-btn');
+      if (btn) btn.textContent = '✕ Close';
+    }
+  });
+</script>
     <button onclick="closePrintOverlay()" style="background:#f0f0f0;color:#333;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;flex:1;">✕ Close</button>
   </div>
 </div>
@@ -606,7 +615,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '5.3';
+const APP_VERSION = '5.4';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -850,6 +859,11 @@ function calcEarnings(totalMins, rate) {
   return (totalMins / 60) * rate.hourly_rate;
 }
 
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 function pdfTimestamp() {
   // Returns YYYYMMDD-HHMMSS for use in PDF filenames
   const now = new Date();
@@ -884,27 +898,44 @@ function calcPeriodEarnings(entries, user) {
 }
 
 function validateRate(newRate, existingRates, excludeId) {
-  // Returns null if valid, error string if not
+  // Returns { error: string|null, warning: string|null }
   const others = (existingRates || []).filter(r => r.id !== excludeId);
-  if (!newRate.from_date || !newRate.to_date) return 'Both dates are required';
-  if (newRate.from_date > newRate.to_date) return 'End date must be after start date';
-  if (!newRate.hourly_rate || newRate.hourly_rate <= 0) return 'Hourly rate must be greater than zero';
+  if (!newRate.from_date || !newRate.to_date) return { error: 'Both dates are required', warning: null };
+  if (newRate.from_date > newRate.to_date) return { error: 'End date must be after start date', warning: null };
+  if (!newRate.hourly_rate || newRate.hourly_rate <= 0) return { error: 'Hourly rate must be greater than zero', warning: null };
+
   const today = new Date().toISOString().slice(0,10);
   const isFuture = newRate.from_date > today;
   const futureRates  = others.filter(r => r.from_date > today);
   const currentRates = others.filter(r => r.from_date <= today);
 
   if (isFuture && futureRates.length >= 1)
-    return 'Only 1 future rate allowed. Delete the existing future rate first.';
+    return { error: 'Only 1 future rate allowed. Delete the existing future rate first.', warning: null };
   if (!isFuture && currentRates.length >= 3)
-    return 'Maximum 3 current/past rates per person. Delete one to add another.';
+    return { error: 'Maximum 3 current/past rates per person. Delete one to add another.', warning: null };
 
-  // Check for overlaps across all others
+  // Check for overlaps — dates are inclusive so adjacent rates must not share a date
   for (const r of others) {
     const overlap = newRate.from_date <= r.to_date && newRate.to_date >= r.from_date;
-    if (overlap) return `Overlaps with existing rate (${r.from_date} – ${r.to_date})`;
+    if (overlap) return { error: 'Overlaps with existing rate (' + r.from_date + ' – ' + r.to_date + '). End dates are inclusive — the next rate must start the following day.', warning: null };
   }
-  return null;
+
+  // Check for gaps — warn if there are other rates and a gap exists between this and adjacent rates
+  let warning = null;
+  const sorted = [...others, newRate].sort((a,b) => a.from_date.localeCompare(b.from_date));
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const current = sorted[i];
+    const next    = sorted[i + 1];
+    // Expected: next.from_date should be exactly one day after current.to_date
+    const expectedNext = new Date(current.to_date);
+    expectedNext.setDate(expectedNext.getDate() + 1);
+    const expectedStr = expectedNext.toISOString().slice(0,10);
+    if (next.from_date > expectedStr) {
+      warning = 'Gap detected: ' + current.to_date + ' to ' + next.from_date + ' has no rate applied. Days in this gap will show as unrated.';
+    }
+  }
+
+  return { error: null, warning };
 }
 
 function autoEndDate(fromDate) {
@@ -2772,21 +2803,82 @@ window.closeReportOverlay = function() {
 window.printCurrentReport = function() {
   const titleEl = document.getElementById('report-title');
   const bodyEl  = document.getElementById('report-body');
-  const overlay = document.getElementById('print-overlay');
-  const content = document.getElementById('print-content');
-  if (!overlay || !content || !bodyEl) return;
+  if (!bodyEl) return;
   const title = titleEl ? titleEl.textContent : 'TimeShift Report';
   const now = new Date().toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
-  content.innerHTML = `
-    <div style="border-bottom:2px solid #7C5CBF;padding-bottom:8px;margin-bottom:12px;">
-      <h2 style="color:#7C5CBF;font-size:16pt;margin:0 0 2px;">${title}</h2>
-      <p style="color:#888;font-size:9pt;margin:0;">TimeShift · Printed ${now}</p>
-    </div>
-    ${bodyEl.innerHTML}`;
+
+  if (isIOS()) {
+    // iOS does not support window.print() — use jsPDF instead
+    _exportReportViaJsPDF(title, bodyEl, now);
+    return;
+  }
+
+  // Desktop / Android — use print overlay + window.print()
+  const overlay = document.getElementById('print-overlay');
+  const content = document.getElementById('print-content');
+  if (!overlay || !content) return;
+  content.innerHTML =
+    '<div style="border-bottom:2px solid #7C5CBF;padding-bottom:8px;margin-bottom:12px;">'
+    + '<h2 style="color:#7C5CBF;font-size:16pt;margin:0 0 2px;">' + title + '</h2>'
+    + '<p style="color:#888;font-size:9pt;margin:0;">TimeShift · Printed ' + now + '</p>'
+    + '</div>' + bodyEl.innerHTML;
   closeReportOverlay();
   overlay.style.display = 'block';
   overlay.scrollTop = 0;
 };
+
+function _exportReportViaJsPDF(title, bodyEl, dateStr) {
+  // iOS fallback — parse report-body HTML rows and build a jsPDF table
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+
+    // Header
+    doc.setFillColor(124,92,191);
+    doc.rect(0,0,210,22,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(13); doc.setFont('helvetica','bold');
+    doc.text(title, 14, 10);
+    doc.setFontSize(8); doc.setFont('helvetica','normal');
+    doc.text('TimeShift · ' + dateStr, 14, 18);
+    doc.setTextColor(0,0,0);
+
+    // Extract rows from the rendered HTML
+    const rows = [];
+    const sections = bodyEl.querySelectorAll('.rpt-total, .rpt-row, .rpt-day');
+    sections.forEach(el => {
+      const spans = el.querySelectorAll('span, div');
+      const texts = Array.from(spans)
+        .map(s => s.innerText.trim())
+        .filter(t => t.length > 0 && !t.includes('▶'));
+      if (texts.length >= 2) {
+        rows.push([texts[0], texts[texts.length - 1]]);
+      }
+    });
+
+    if (rows.length) {
+      doc.autoTable({
+        startY: 28,
+        head: [['Description', 'Hours / Earnings']],
+        body: rows,
+        headStyles: { fillColor:[255,107,138], textColor:255, fontSize:8 },
+        alternateRowStyles: { fillColor:[253,245,255] },
+        styles: { fontSize:8, cellPadding:2 },
+        margin: { left:14, right:14 }
+      });
+    } else {
+      doc.setFontSize(10);
+      doc.text('No data to display.', 14, 35);
+    }
+
+    const ts = pdfTimestamp();
+    doc.save('TimeShift_Report_' + ts + '.pdf');
+    closeReportOverlay();
+    showToast('PDF saved');
+  } catch(e) {
+    showToast('PDF export failed: ' + e.message);
+  }
+}
 
 window.closePrintOverlay = function() {
   const overlay = document.getElementById('print-overlay');
@@ -2949,8 +3041,12 @@ window.saveRate = async (userId) => {
   if (!user.rates) user.rates = [];
 
   const newRate = { id: uid(), from_date: from, to_date: to, hourly_rate: amount, note };
-  const err = validateRate(newRate, user.rates, null);
-  if (err) { errEl.textContent = err; return; }
+  const vResult = validateRate(newRate, user.rates, null);
+  if (vResult.error) { errEl.textContent = vResult.error; return; }
+  if (vResult.warning) {
+    errEl.style.color = '#A05A00';
+    errEl.textContent = '⚠ ' + vResult.warning + ' — saved anyway.';
+  } else { errEl.textContent = ''; }
 
   user.rates.push(newRate);
   user.rates.sort((a,b) => a.from_date.localeCompare(b.from_date));
@@ -2983,8 +3079,12 @@ window.updateRate = async (userId, idx) => {
   if (!user || !user.rates || !user.rates[idx]) return;
 
   const updatedRate = { ...user.rates[idx], from_date: from, to_date: to, hourly_rate: amount, note };
-  const err = validateRate(updatedRate, user.rates, updatedRate.id);
-  if (err) { errEl.textContent = err; return; }
+  const vResult = validateRate(updatedRate, user.rates, updatedRate.id);
+  if (vResult.error) { errEl.textContent = vResult.error; return; }
+  if (vResult.warning) {
+    errEl.style.color = '#A05A00';
+    errEl.textContent = '⚠ ' + vResult.warning + ' — saved anyway.';
+  } else { errEl.textContent = ''; }
 
   const before = { ...user.rates[idx] };
   user.rates[idx] = updatedRate;
