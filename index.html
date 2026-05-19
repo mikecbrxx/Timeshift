@@ -464,11 +464,11 @@
   /* ── FAB ── */
   .fab {
     position: fixed; right: 16px; bottom: 76px; z-index: 90;
-    width: 48px; height: 48px; border-radius: 50%;
+    width: 40px; height: 40px; border-radius: 50%;
     background: linear-gradient(135deg, var(--coral), var(--coral-dark));
-    color: white; border: none; font-size: 26px; font-weight: 300;
+    color: white; border: none; font-size: 22px; font-weight: 300;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 20px rgba(255,107,138,0.5);
+    box-shadow: 0 4px 16px rgba(255,107,138,0.45);
     transition: transform 0.15s, box-shadow 0.15s;
   }
   .fab:active { transform: scale(0.92); }
@@ -495,6 +495,20 @@
     font-size: 13px; font-weight: 600; z-index: 300;
     white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     display: none; border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* ── PRINT STYLES — compressed for PDF ── */
+  @media print {
+    body > *:not(#print-overlay) { display: none !important; }
+    #print-overlay { position: static !important; padding: 4px !important; box-shadow: none !important; }
+    #print-buttons { display: none !important; }
+    #print-content h2 { font-size: 13pt !important; margin: 0 0 2px !important; }
+    #print-content h3 { font-size: 10pt !important; margin: 4px 0 2px !important; }
+    #print-content p  { font-size: 8pt !important; margin: 0 0 4px !important; }
+    #print-content .rpt-row { padding: 2px 0 !important; font-size: 8pt !important; border-bottom: 1px solid #eee !important; }
+    #print-content .rpt-section { margin-bottom: 6px !important; page-break-inside: avoid; }
+    #print-content .rpt-total { font-size: 10pt !important; font-weight: bold; }
+    #print-content .rpt-day { font-size: 7pt !important; padding: 1px 0 !important; }
   }
 
   /* Responsive */
@@ -524,7 +538,7 @@
     <defs><linearGradient id="tsl1" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#7C5CBF"/><stop offset="100%" stop-color="#FF6B8A"/></linearGradient></defs>
   </svg>
   <div style="font-family:sans-serif;font-weight:800;font-size:24px;color:white;letter-spacing:1px;">TimeShift</div>
-  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.8</div>
+  <div style="font-family:sans-serif;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">v4.9</div>
   <div id="loading-msg" style="font-family:sans-serif;font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">Starting…</div>
   <!-- Spinner dots -->
   <div id="loading-dots" style="display:flex;gap:8px;margin-top:4px;">
@@ -537,6 +551,30 @@
     <div style="font-size:32px;">⚠️</div>
     <div id="loading-error-msg" style="font-size:14px;color:#FF8FA3;font-weight:600;line-height:1.5;"></div>
     <button id="retry-btn" onclick="tsRetryStartup()" style="background:linear-gradient(135deg,#FF6B8A,#E84D6F);color:white;border:none;border-radius:24px;padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;">↺ Try Again</button>
+  </div>
+</div>
+
+<!-- PRINT OVERLAY — Road Eagles pattern, hidden until PDF export -->
+<div id="print-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;z-index:9999;overflow-y:auto;padding:16px;color:#111;font-family:Arial,sans-serif;">
+  <div id="print-content"></div>
+  <div id="print-buttons" style="margin-top:20px;display:flex;gap:10px;">
+    <button onclick="window.print()" style="background:linear-gradient(135deg,#7C5CBF,#5E3FA3);color:white;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;flex:1;">🖨 Print / Save as PDF</button>
+    <button onclick="closePrintOverlay()" style="background:#f0f0f0;color:#333;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;flex:1;">✕ Close</button>
+  </div>
+</div>
+
+<!-- REPORT MODAL — renders report on screen before PDF export -->
+<div id="report-overlay" style="display:none;position:fixed;inset:0;background:rgba(44,32,64,0.5);z-index:500;align-items:flex-end;justify-content:center;">
+  <div id="report-modal" style="background:white;width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div id="report-title" style="font-family:var(--font-head);font-weight:700;font-size:16px;color:var(--text);"></div>
+      <button onclick="closeReportOverlay()" style="width:30px;height:30px;border-radius:50%;background:var(--bg2);border:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="report-body"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button onclick="closeReportOverlay()" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;">Close</button>
+      <button onclick="printCurrentReport()" style="flex:1;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#00B4C5,#0099A8);color:white;font-size:13px;font-weight:600;cursor:pointer;">🖨 Export PDF</button>
+    </div>
   </div>
 </div>
 
@@ -568,7 +606,7 @@
 // ══════════════════════════════════════════
 // VERSION — update this with every release
 // ══════════════════════════════════════════
-const APP_VERSION = '4.8';
+const APP_VERSION = '4.9';
 
 // ═══════════════════════════════════════════════════
 // STARTUP HELPERS — Road Eagles pattern
@@ -719,6 +757,8 @@ let state = {
   adminReportYear: new Date().getFullYear(),
   adminReportTab: 'month',
   reportViewMode: 'own',  // 'own' or 'staff'
+  reportDrillMonth: null,   // {m, y} when drilling into a month from year view
+  reportDrillWeek: null,    // week start date string when drilling into a week from month view
   adminSelectedUsers: [],  // empty = all users
   adminDrillUser: null,      // user id being drilled into
   loading: false,
@@ -1345,39 +1385,67 @@ function renderReports() {
   const u = state.currentUser;
   const now = new Date();
 
-  // Week report
+  // ── Helper: earnings line ──
+  function earningsLine(entries, user) {
+    const ep = calcPeriodEarnings(entries, user);
+    if (!ep.hasRates) return '';
+    return `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">
+      Earnings: ${fmtCurrency(ep.total)}${ep.unrated>0?` (${ep.unrated} unrated)`:''}
+    </div>`;
+  }
+
+  // ── Helper: build HTML for on-screen report overlay ──
+  function buildReportHTML(title, summaryHtml, rowsHtml) {
+    return `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">${title}</div>
+      ${summaryHtml}${rowsHtml}`;
+  }
+
+  // ── WEEK — shows day totals, tap day for shift detail ──
   function weekReport() {
     const week = getWeekBounds(now);
     const entries = state.entries.filter(e => {
       if (e.user_id !== u.id) return false;
       const d = parseDate(e.date);
       return d >= week.start && d <= week.end;
-    });
-    const days = entries.sort((a,b) => a.date.localeCompare(b.date));
+    }).sort((a,b) => a.date.localeCompare(b.date));
     const total = sumMins(entries);
-    return `<div class="page-pad">
-      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">
-        <div class="flex-between">
-          <span class="fw-700" style="color:#00696F;">Week Total</span>
-          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
-        </div>
-        ${(() => { const e = calcPeriodEarnings(entries, u); return e.hasRates ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(e.total)}${e.unrated>0?` <span style="color:var(--text3)">(${e.unrated} day${e.unrated!==1?'s':''} unrated)</span>`:''}</div>` : ''; })()}
-        <div class="text-xs text-muted mt-1">${days.length} days worked · ${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
+    const weekLabel = `${week.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${week.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+
+    const summaryHtml = `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">
+      <div class="flex-between">
+        <span class="fw-700" style="color:#00696F;">Week Total</span>
+        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
       </div>
-      ${days.map(e => `<div class="entry-item" style="cursor:default;">
+      ${earningsLine(entries, u)}
+      <div class="text-xs text-muted mt-1">${entries.length} days · ${weekLabel}</div>
+    </div>`;
+
+    const rowsHtml = entries.map(e => {
+      const rate = getRateForDate(u, e.date);
+      const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '';
+      return `<div class="entry-item" style="cursor:pointer;" onclick="showDayDetail('${e.id}')">
         <div class="flex-between">
           <div>
             <div class="fw-700 text-sm">${displayDate(e.date)}</div>
-            <div class="text-xs text-muted">${e.shifts.length} shift${e.shifts.length>1?'s':''}</div>
+            <div class="text-xs text-muted">${e.shifts.map(s=>s.start+'–'+s.end).join(' · ')}</div>
           </div>
-          <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
+          <div style="text-align:right;">
+            <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
+            ${earn?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${earn}</div>`:''}
+          </div>
         </div>
-      </div>`).join('') || `<div class="empty">${icons.chart}<p>No entries this week</p></div>`}
-      <button class="btn btn-teal btn-full mt-4" onclick="exportPDF('week')">${icons.download} Export PDF</button>
+      </div>`;
+    }).join('') || `<div class="empty">${icons.chart}<p>No entries this week</p></div>`;
+
+    return `<div class="page-pad">
+      ${summaryHtml}${rowsHtml}
+      <button class="btn btn-teal btn-full mt-4" onclick="showReportOverlay('Week ${weekLabel} — ${u.name}', ${JSON.stringify(buildReportHTML('Week ' + weekLabel, summaryHtml, rowsHtml))})">
+        ${icons.chart} View &amp; Export Report
+      </button>
     </div>`;
   }
 
-  // Month report
+  // ── MONTH — shows week totals, tap week to drill into days ──
   function monthReport() {
     const m = state.reportMonth, y = state.reportYear;
     const entries = state.entries.filter(e => {
@@ -1388,68 +1456,109 @@ function renderReports() {
     const total = sumMins(entries);
     const prev = m === 0 ? { m:11, y:y-1 } : { m:m-1, y };
     const next = m === 11 ? { m:0, y:y+1 } : { m:m+1, y };
-    const isCurrentOrFuture = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
+    const isFuture = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
+
+    // Group entries into ISO weeks
+    function getISOWeek(dateStr) {
+      const d = parseDate(dateStr);
+      const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
+      const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+      return { key: mon.toISOString().slice(0,10), start: mon, end: sun };
+    }
+    const weekMap = {};
+    entries.forEach(e => {
+      const wk = getISOWeek(e.date);
+      if (!weekMap[wk.key]) weekMap[wk.key] = { start:wk.start, end:wk.end, entries:[] };
+      weekMap[wk.key].entries.push(e);
+    });
+    const weeks = Object.values(weekMap).sort((a,b) => a.start - b.start);
+
+    const summaryHtml = `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF0F3,#F0EBFF);border-color:var(--coral-light);">
+      <div class="flex-between">
+        <span class="fw-700" style="color:var(--coral-dark);">Month Total</span>
+        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
+      </div>
+      ${earningsLine(entries, u)}
+      <div class="text-xs text-muted mt-1">${entries.length} days worked</div>
+    </div>`;
+
+    const rowsHtml = weeks.map(wk => {
+      const wkTotal = sumMins(wk.entries);
+      const wkLabel = `${wk.start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${wk.end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+      const wkEp = calcPeriodEarnings(wk.entries, u);
+      return `<div class="entry-item" style="cursor:pointer;" onclick="drillWeek('${wk.start.toISOString().slice(0,10)}')">
+        <div class="flex-between">
+          <div>
+            <div class="fw-700 text-sm">Week of ${wkLabel}</div>
+            <div class="text-xs text-muted">${wk.entries.length} day${wk.entries.length!==1?'s':''} · tap for detail</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="fw-800 text-coral">${formatMins(wkTotal)}</div>
+            ${wkEp.hasRates?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${fmtCurrency(wkEp.total)}</div>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('') || `<div class="empty">${icons.chart}<p>No entries for ${MONTH_SHORT[m]} ${y}</p></div>`;
+
     return `<div class="page-pad">
       <div class="flex-between mb-4">
         <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportMonth(${prev.m},${prev.y})">${icons.chevronLeft}</button>
         <span class="fw-700" style="font-size:13px;">${MONTH_NAMES[m]} ${y}</span>
-        <button class="btn btn-secondary btn-icon btn-sm" ${isCurrentOrFuture?'disabled':''} onclick="setReportMonth(${next.m},${next.y})">${icons.chevronRight}</button>
+        <button class="btn btn-secondary btn-icon btn-sm" ${isFuture?'disabled':''} onclick="setReportMonth(${next.m},${next.y})">${icons.chevronRight}</button>
       </div>
-      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF0F3,#F0EBFF);border-color:var(--coral-light);">
-        <div class="flex-between">
-          <span class="fw-700" style="color:var(--coral-dark);">Month Total</span>
-          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
-        </div>
-        ${(() => { const e = calcPeriodEarnings(entries, u); return e.hasRates ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(e.total)}${e.unrated>0?` <span style="color:var(--text3)">(${e.unrated} unrated)</span>`:''}</div>` : ''; })()}
-        <div class="text-xs text-muted mt-1">${entries.length} days worked</div>
-      </div>
-      ${entries.map(e => `<div class="entry-item" style="cursor:default;">
-        <div class="flex-between">
-          <div>
-            <div class="fw-700 text-sm">${displayDate(e.date)}</div>
-            <div class="text-xs text-muted">${e.shifts.map((s,i)=>`S${i+1}: ${s.start}–${s.end}`).join(' · ')}</div>
-            ${e.note?`<div class="text-xs text-muted">${e.note}</div>`:''}
-          </div>
-          <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
-        </div>
-      </div>`).join('') || `<div class="empty">${icons.chart}<p>No entries for ${MONTH_SHORT[m]} ${y}</p></div>`}
-      <button class="btn btn-teal btn-full mt-4" onclick="exportPDF('month')">${icons.download} Export PDF</button>
+      ${summaryHtml}${rowsHtml}
+      <button class="btn btn-teal btn-full mt-4" onclick="showReportOverlay('${MONTH_NAMES[m]} ${y} — ${u.name}', ${JSON.stringify(buildReportHTML(MONTH_NAMES[m] + ' ' + y, summaryHtml, rowsHtml))})">
+        ${icons.chart} View &amp; Export Report
+      </button>
     </div>`;
   }
 
-  // Year report
+  // ── YEAR — shows month totals, tap month to drill into weeks ──
   function yearReport() {
     const y = state.reportYear;
     const entries = state.entries.filter(e => e.user_id === u.id && parseDate(e.date).getFullYear() === y);
     const total = sumMins(entries);
+
+    const summaryHtml = `<div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF4E5,#FFE8EE);border-color:var(--amber);">
+      <div class="flex-between">
+        <span class="fw-700" style="color:#A05A00;">Year Total</span>
+        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
+      </div>
+      ${earningsLine(entries, u)}
+      <div class="text-xs text-muted mt-1">${entries.length} days worked in ${y}</div>
+    </div>`;
+
     const byMonth = Array.from({length:12}, (_,i) => {
       const me = entries.filter(e => parseDate(e.date).getMonth() === i);
-      return { month: i, mins: sumMins(me), days: me.length };
-    });
+      return { month:i, entries:me, mins:sumMins(me) };
+    }).filter(mm => mm.mins > 0);
+
+    const rowsHtml = byMonth.map(mm => {
+      const mmEp = calcPeriodEarnings(mm.entries, u);
+      return `<div class="entry-item" style="cursor:pointer;" onclick="drillMonth(${mm.month},${y})">
+        <div class="flex-between">
+          <div>
+            <div class="fw-700 text-sm">${MONTH_NAMES[mm.month]}</div>
+            <div class="text-xs text-muted">${mm.entries.length} day${mm.entries.length!==1?'s':''} · tap for weeks</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="fw-800 text-coral">${formatMins(mm.mins)}</div>
+            ${mmEp.hasRates?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${fmtCurrency(mmEp.total)}</div>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('') || `<div class="empty">${icons.chart}<p>No entries for ${y}</p></div>`;
+
     return `<div class="page-pad">
       <div class="flex-between mb-4">
         <button class="btn btn-secondary btn-icon btn-sm" onclick="setReportYear(${y-1})">${icons.chevronLeft}</button>
         <span class="fw-700" style="font-size:13px;">${y}</span>
-        <button class="btn btn-secondary btn-icon btn-sm" ${y >= now.getFullYear() ? 'disabled' : ''} onclick="setReportYear(${y+1})">${icons.chevronRight}</button>
+        <button class="btn btn-secondary btn-icon btn-sm" ${y>=now.getFullYear()?'disabled':''} onclick="setReportYear(${y+1})">${icons.chevronRight}</button>
       </div>
-      <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#FFF4E5,#FFE8EE);border-color:var(--amber);">
-        <div class="flex-between">
-          <span class="fw-700" style="color:#A05A00;">Year Total</span>
-          <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
-        </div>
-        ${(() => { const e = calcPeriodEarnings(entries, u); return e.hasRates ? `<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(e.total)}${e.unrated>0?` <span style="color:var(--text3)">(${e.unrated} unrated)</span>`:''}</div>` : ''; })()}
-        <div class="text-xs text-muted mt-1">${entries.length} days worked in ${y}</div>
-      </div>
-      ${byMonth.filter(m => m.mins > 0).map(m => `<div class="entry-item" style="cursor:default;">
-        <div class="flex-between">
-          <div>
-            <div class="fw-700 text-sm">${MONTH_NAMES[m.month]}</div>
-            <div class="text-xs text-muted">${m.days} day${m.days!==1?'s':''} worked</div>
-          </div>
-          <div class="fw-800 text-coral">${formatMins(m.mins)}</div>
-        </div>
-      </div>`).join('') || `<div class="empty">${icons.chart}<p>No entries for ${y}</p></div>`}
-      <button class="btn btn-teal btn-full mt-4" onclick="exportPDF('year')">${icons.download} Export PDF</button>
+      ${summaryHtml}${rowsHtml}
+      <button class="btn btn-teal btn-full mt-4" onclick="showReportOverlay('${y} — ${u.name}', ${JSON.stringify(buildReportHTML(String(y), summaryHtml, rowsHtml))})">
+        ${icons.chart} View &amp; Export Report
+      </button>
     </div>`;
   }
 
@@ -1469,7 +1578,7 @@ function renderReports() {
     </div>
     ${tab === 'week' ? weekReport() : tab === 'month' ? monthReport() : yearReport()}
     ` : renderAdminReportsInline()}
-    <div style="height:20px;"></div>`;
+    <div style="height:80px;"></div>`;
 }
 
 // ── ADMIN DRILL — full detail for one user ──
@@ -2542,7 +2651,127 @@ window.setEntriesMonth = (m, y) => {
 };
 
 window.setReportTab = (tab) => { state.reportTab = tab; render(); };
+
+// ── Report overlay (on-screen first, then print) ──
+window.showReportOverlay = function(title, bodyHtml) {
+  const overlay = document.getElementById('report-overlay');
+  const titleEl = document.getElementById('report-title');
+  const bodyEl  = document.getElementById('report-body');
+  if (!overlay || !titleEl || !bodyEl) return;
+  titleEl.textContent = title;
+  bodyEl.innerHTML = bodyHtml;
+  overlay.style.display = 'flex';
+};
+
+window.closeReportOverlay = function() {
+  const overlay = document.getElementById('report-overlay');
+  if (overlay) overlay.style.display = 'none';
+};
+
+window.printCurrentReport = function() {
+  const titleEl = document.getElementById('report-title');
+  const bodyEl  = document.getElementById('report-body');
+  const overlay = document.getElementById('print-overlay');
+  const content = document.getElementById('print-content');
+  if (!overlay || !content || !bodyEl) return;
+  const title = titleEl ? titleEl.textContent : 'TimeShift Report';
+  const now = new Date().toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
+  content.innerHTML = `
+    <div style="border-bottom:2px solid #7C5CBF;padding-bottom:8px;margin-bottom:12px;">
+      <h2 style="color:#7C5CBF;font-size:16pt;margin:0 0 2px;">${title}</h2>
+      <p style="color:#888;font-size:9pt;margin:0;">TimeShift · Printed ${now}</p>
+    </div>
+    ${bodyEl.innerHTML}`;
+  closeReportOverlay();
+  overlay.style.display = 'block';
+  overlay.scrollTop = 0;
+};
+
+window.closePrintOverlay = function() {
+  const overlay = document.getElementById('print-overlay');
+  if (overlay) overlay.style.display = 'none';
+};
 window.setReportViewMode = (mode) => { state.reportViewMode = mode; render(); };
+
+// Drill from year into a specific month (shows week totals)
+window.drillMonth = (m, y) => {
+  state.reportTab = 'month';
+  state.reportMonth = m;
+  state.reportYear = y;
+  render();
+};
+
+// Drill from month into a specific week (shows day totals in overlay)
+window.drillWeek = (weekStartStr) => {
+  const weekStart = parseDate(weekStartStr);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+  const u = state.currentUser;
+  const entries = state.entries.filter(e => {
+    if (e.user_id !== u.id) return false;
+    const d = parseDate(e.date);
+    return d >= weekStart && d <= weekEnd;
+  }).sort((a,b) => a.date.localeCompare(b.date));
+  const total = sumMins(entries);
+  const wkLabel = `${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+  const ep = calcPeriodEarnings(entries, u);
+
+  const bodyHtml = `
+    <div class="card card-sm mb-4" style="background:linear-gradient(135deg,#E0F7FA,#E8F5E9);">
+      <div class="flex-between">
+        <span class="fw-700" style="color:#00696F;">Week Total</span>
+        <span class="fw-800 text-violet" style="font-size:14px;">${formatMins(total)}</span>
+      </div>
+      ${ep.hasRates?`<div class="text-xs" style="color:#1A7A42;font-weight:700;margin-top:2px;">Earnings: ${fmtCurrency(ep.total)}</div>`:''}
+    </div>
+    ${entries.map(e => {
+      const rate = getRateForDate(u, e.date);
+      const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : '';
+      return `<div class="entry-item" style="cursor:default;margin-bottom:6px;">
+        <div class="flex-between">
+          <div>
+            <div class="fw-700 text-sm">${displayDate(e.date)}</div>
+            <div class="text-xs text-muted">${e.shifts.map(s=>s.start+'–'+s.end).join(' · ')}</div>
+            ${e.note?`<div class="text-xs text-muted">${e.note}</div>`:''}
+          </div>
+          <div style="text-align:right;">
+            <div class="fw-800 text-coral">${formatMins(e.total_mins)}</div>
+            ${earn?`<div class="text-xs" style="color:#1A7A42;font-weight:700;">${earn}</div>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('')}`;
+
+  showReportOverlay(`Week ${wkLabel} — ${u.name}`, bodyHtml);
+};
+
+// Tap a day to see full shift detail in overlay
+window.showDayDetail = (entryId) => {
+  const u = state.currentUser;
+  const e = state.entries.find(x => x.id === entryId);
+  if (!e) return;
+  const rate = getRateForDate(u, e.date);
+  const earn = rate ? fmtCurrency(calcEarnings(e.total_mins, rate)) : null;
+  const bodyHtml = `
+    <div class="fw-700 text-sm mb-4" style="margin-bottom:8px;">${displayDate(e.date)}</div>
+    ${e.shifts.map((s,i) => `<div class="card card-sm mb-4" style="background:var(--bg2);margin-bottom:6px;">
+      <div class="flex-between">
+        <span class="shift-badge badge-${i+1}">Shift ${i+1}</span>
+        <span class="fw-700">${s.start} – ${s.end}</span>
+        <span class="fw-800 text-violet">${formatMins(roundShift(parseTime(s.start),parseTime(s.end)))}</span>
+      </div>
+    </div>`).join('')}
+    <div class="flex-between" style="padding:8px 0;border-top:1.5px solid var(--border);margin-top:4px;">
+      <span class="fw-700">Day Total</span>
+      <span class="fw-800 text-coral" style="font-size:16px;">${formatMins(e.total_mins)}</span>
+    </div>
+    ${earn ? `<div class="flex-between" style="padding:4px 0;">
+      <span class="text-sm text-muted">Earnings</span>
+      <span style="font-weight:700;color:#1A7A42;">${earn}</span>
+    </div>` : ''}
+    ${e.note ? `<div class="text-xs text-muted" style="margin-top:6px;">${e.note}</div>` : ''}`;
+
+  showReportOverlay(displayDate(e.date), bodyHtml);
+};
 window.setReportMonth = (m, y) => { state.reportMonth = m; state.reportYear = y; render(); };
 window.setReportYear = (y) => { state.reportYear = y; render(); };
 window.setAdminMonth = (m, y) => { state.adminReportMonth = m; state.adminReportYear = y; render(); };
