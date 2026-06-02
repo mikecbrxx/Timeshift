@@ -1,12 +1,15 @@
 # TimeShift — Deployment Guide
+**Version:** v5.6 · June 2026
 
-## Files to upload to GitHub
+---
+
+## Files to Upload to GitHub
 
 | File | Purpose |
 |------|---------|
 | `index.html` | The entire application |
 | `manifest.json` | PWA metadata — name, icons, theme colour |
-| `sw.js` | Service worker — PWA install, online-only |
+| `sw.js` | Service worker — caching and PWA install |
 | `icon-192.png` | Android home screen icon |
 | `icon-512.png` | Android splash screen icon |
 | `apple-touch-icon.png` | iOS home screen icon (180×180) |
@@ -20,7 +23,7 @@
 ### Step 1 — Create a repository
 1. Go to [github.com](https://github.com) and sign in
 2. Click **+** → **New repository**
-3. Name it (e.g. `timeshift`), set to **Public**
+3. Name it (e.g. `TimeShift`), set to **Public**
 4. Click **Create repository**
 
 ### Step 2 — Upload files
@@ -33,9 +36,9 @@
 ```bash
 git init
 git add .
-git commit -m "Initial TimeShift deploy"
+git commit -m "Deploy TimeShift v5.6"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/timeshift.git
+git remote add origin https://github.com/YOUR_USERNAME/TimeShift.git
 git push -u origin main
 ```
 
@@ -44,10 +47,10 @@ git push -u origin main
 2. Under **Source** select **Deploy from a branch**
 3. Set branch to `main`, folder to `/ (root)`
 4. Click **Save**
-5. Live at: `https://YOUR_USERNAME.github.io/timeshift/` within ~60 seconds
+5. Live at: `https://YOUR_USERNAME.github.io/TimeShift/` within ~60 seconds
 
 ### Step 4 — Install on mobile
-- **Android (Chrome):** tap ⋮ → Add to Home screen → Install
+- **Android (Chrome):** tap ⋮ → Add to Home Screen → Install
 - **iOS (Safari only):** tap Share (□↑) → Add to Home Screen → Add
 
 ---
@@ -62,69 +65,26 @@ git push -u origin main
 
 ### Step 2 — Create a Firestore database
 1. From the project overview tap the **☰ hamburger menu** (top left)
-2. Find and tap **Firestore Database** — you'll see a **Cloud Firestore** page with a **Create database** button
-3. Tap **Create database** — a 3-step wizard opens:
+2. Find and tap **Firestore Database** → tap **Create database**
 
 **Step 1 of 3 — Select edition**
-- Leave **Standard edition** selected
-- Tap **Next**
+- Leave **Standard edition** selected → tap **Next**
 
 **Step 2 of 3 — Database ID and location**
 - Leave **Database ID** as `(default)`
-- Change **Location** from `nam5 (United States)` to `eur3 (Europe)` for UK-based storage
-- Note: location cannot be changed later
+- Change **Location** to `eur3 (Europe)` for UK-based storage
 - Tap **Next**
 
 **Step 3 of 3 — Configure**
-- Select **Start in test mode**
-- You'll see the default rules and a warning that access is open for 30 days — that's fine, we update the rules in Step 5
-- Tap **Create**
+- Select **Start in test mode** → tap **Create**
 
-4. After a short wait you'll land on the **Database** screen showing:
-   - Tabs across the top: **Data · Rules · Indexes · Disaster recovery**
-   - A panel view with `(default)` and **+ Start collection**
-   - This means the database is ready ✓
+### Step 3 — Update Firestore security rules
+Replace test mode rules immediately with permanent rules:
 
-### Step 3 — Register a web app and get your config keys
-1. Tap the **☰ menu** and tap the **project name** at the top to go back to the project overview
-2. On the project overview page look for the icons row — tap the **Web icon** (`</>`)
-3. Give the app a nickname (e.g. `TimeShift Web`) — no need to tick Firebase Hosting
-4. Tap **Register app**
-5. You'll see a `firebaseConfig` block like this:
+1. Firebase Console → **Firestore Database** → **Rules** tab
+2. Replace all content with:
 
-```javascript
-const firebaseConfig = {
-  apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXXXXX",
-  authDomain: "timeshift-xxxxx.firebaseapp.com",
-  projectId: "timeshift-xxxxx",
-  storageBucket: "timeshift-xxxxx.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef1234567890"
-};
 ```
-
-6. **Copy these three values** — you'll need them in Step 4:
-   - `apiKey`
-   - `projectId`
-   - `appId`
-
-6. The values may be cut off on mobile — tap the **copy icon** (bottom right of the code block) to copy the entire config to your clipboard, then paste into Notes to read the full values
-7. Tap **Continue to the console**
-
-### Step 4 — Connect TimeShift to Firebase
-1. Open TimeShift in your browser and log in as Admin (PIN: `0000` in demo mode)
-2. Tap the **Config** tab in the bottom nav (gear icon)
-3. Paste in your three values: **API Key**, **Project ID**, **App ID**
-4. Tap **Connect to Firebase**
-5. The app connects, loads live data, and shows a green **Live** badge ✓
-
-### Step 5 — Update Firestore security rules
-The test mode rules expire after 30 days. Replace them now with permanent open rules suitable for a PIN-protected internal app:
-
-1. In Firebase Console → **Firestore Database** → tap the **Rules** tab
-2. Replace the entire contents with:
-
-```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -149,62 +109,130 @@ service cloud.firestore {
 
 3. Tap **Publish**
 
-> This keeps the database open to anyone who has your Firebase config — acceptable for an internal PIN-protected app. Firebase Authentication can be added later for stronger security.
+> These rules keep the database open to anyone with the Firebase config keys — acceptable for an internal PIN-protected app.
 
-### Step 6 — Add your first Admin user
-The database starts empty so you need to create the first admin directly in Firestore:
+### Step 4 — Add your first Admin user
+The database starts empty. Create the first admin directly in Firestore:
 
 1. Firebase Console → **Firestore Database** → **Data** tab
 2. Tap **+ Start collection**
 3. **Collection ID:** `users` → tap **Next**
 4. **Document ID:** tap **Auto-ID**
-5. Add these fields one by one using **+ Add field**:
+5. Add these fields using **+ Add field**:
 
 | Field | Type | Value |
 |-------|------|-------|
-| id | string | (copy the auto-generated Document ID) |
+| id | string | (copy the auto-generated Document ID exactly) |
 | name | string | Your full name |
-| pin | string | `0000` |
+| pin | string | `0000` (change after first login) |
 | role | string | `admin` |
 | active | boolean | `true` |
-| initials | string | Your initials e.g. `MJ` |
+| initials | string | Your initials e.g. `MG` |
 | color | string | `#7C5CBF` |
 | phone | string | Your phone number |
-| email | string | Your email |
+| email | string | Your email address |
 | address | string | Your address |
-| city | string | Your city |
 | postcode | string | Your postcode |
-| hourly_rate | null | (leave as null) |
 
 6. Tap **Save**
-7. Log in to TimeShift with PIN `0000`, go to **Users** and add remaining staff from there
+7. Open TimeShift — it will connect automatically and show the PIN screen
+8. Log in with PIN `0000`, go to **Profile** and change your PIN immediately
+9. Go to **Config → Users** to add remaining staff
+
+> **Important:** The `id` field value must be an exact copy of the Document ID shown at the top of the document panel. If they don't match, login will fail.
+
+### Step 5 — Update Firebase credentials in the app (if using a different project)
+The app has the timeshift-94a91 project credentials hardcoded and will work without any configuration. If you need to connect to a **different** Firebase project:
+
+1. Open TimeShift → **Config** → **Firebase Connection**
+2. Enter your **API Key**, **Project ID**, and **App ID** in the Override section
+3. Tap **Save Override**
+
+These override values survive app updates but not browser data clears. The hardcoded defaults are always the fallback.
 
 ---
 
-## Demo Credentials (before Firebase is connected)
-| User | PIN | Role |
-|------|-----|------|
-| Admin User | 0000 | Admin |
-| Sarah Johnson | 1234 | Staff |
-| Emma Clarke | 5678 | Staff |
+## Part 3 — Data Import (Chan's historical entries)
+
+A one-time import tool is available at `fix_chan_entries.html`. Open it directly in a browser (does not need to be uploaded to GitHub), fill in the Firebase credentials and Chan's Firestore user document ID, then tap **Fix All Entries**.
+
+This imports 68 entries dated January–May 2026 with exact shift times from the original spreadsheet.
+
+---
+
+## Features at v5.6
+
+### All Users
+- Log shifts (up to 3 per day, 5-minute rounding, overnight support)
+- View and edit own entries by month
+- Reports: week → day totals, month → week totals, year → month totals
+- Drill down through any level for detail
+- View & Export Report — on-screen preview then Print/Save as PDF
+- Earnings shown where hourly rates are set
+- **Profile screen:** edit own contact info, change PIN, manage own hourly rates
+
+### Admin Only
+- Staff Hours report with checkbox selection, drill-down per user, PDF export
+- Config hub: Users, Year End & Freeze, Backup & Restore, Audit Trail, Firebase Connection
+- Add/edit/deactivate users, reset PINs
+- Set hourly rates for any user
+- Financial year-end freeze — locks earnings calculations with snapshot
+- Full audit trail with PDF export and clear to date
+- Backup and restore to/from JSON file
+
+### Hourly Rates
+- Up to 3 current/past rates + 1 future rate per user
+- Dates are inclusive — adjacent rates must start the day after the previous ends
+- Overlap blocked; gap warned but allowed
+- Future rates shown with FUTURE badge
+- Auto end date: start date + 2 years
+
+### PDF Export
+- All filenames timestamped to prevent overwrites
+- Android/desktop: print overlay + browser Print/Save as PDF
+- iOS: jsPDF direct export (browser print not supported on iOS)
 
 ---
 
 ## Updating the App
-Upload changed files to GitHub and commit — Pages redeploys in seconds.
+Upload changed `index.html` and `sw.js` to GitHub and commit. Pages redeploys within seconds. The service worker cache busts automatically when the version number changes.
 
 ---
 
-## Future: Hourly Rate / Payroll
-`hourly_rate` is already in the user schema (stored as `null`).
-When ready: unhide the field in the user edit form and add a pay column
-to reports using `total_mins / 60 * hourly_rate`. No database changes needed.
+## Troubleshooting
+
+**App stuck on "Starting…" or "Connecting…"**
+- Check your internet connection
+- Wait for the 20-second timeout then tap **Try Again**
+- If it consistently fails, check Firebase Console to confirm the project is active
+
+**Entries or users missing after browser data clear**
+- This is normal — the app reloads everything from Firebase on startup
+- Firebase credentials are hardcoded so no re-entry needed
+- Data in Firebase is unaffected by browser data clears
+
+**PDF export does nothing on iPhone**
+- This is expected — iOS Safari does not support `window.print()`
+- The app automatically uses jsPDF on iOS — a PDF file will download directly
+
+**"Invalid PIN" on login after restore**
+- The restored PIN may differ from what you remember
+- Use Config → Users → Reset PIN to set a new one
 
 ---
 
 ## Version History
-| Version | Date | Notes |
-|---------|------|-------|
-| v1.0 | May 2026 | Initial release — Supabase |
-| v1.1 | May 2026 | Migrated to Firebase Firestore, renamed to TimeShift |
-| v4.2 | May 2026 | Hourly rates, earnings reports, year end freeze, PDF earnings |
+
+| Version | Notes |
+|---------|-------|
+| v1.0 | Initial release — Supabase backend |
+| v1.1 | Migrated to Firebase Firestore, renamed ShiftLog → TimeShift |
+| v2.x | Audit trail, backup/restore, admin reports, 5-minute rounding |
+| v3.x | Hardcoded Firebase credentials, Road Eagles startup sequence, FAB navigation |
+| v4.x | Hourly rates, earnings reports, year-end freeze, Firebase compat SDK |
+| v5.0 | Report grouping (year→month→week→day), on-screen preview before PDF |
+| v5.1 | PDF timestamps, freeze reminder snooze |
+| v5.2–v5.3 | Report overlay fixes, navigation stack for back button |
+| v5.4 | Rate gap warning, iOS PDF fallback |
+| v5.5 | Fixed missing entries (inline script parser bug) |
+| v5.6 | Profile screen — all users can edit contact info, PIN and own rates |
