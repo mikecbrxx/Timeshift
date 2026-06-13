@@ -2,12 +2,15 @@
   "name": "TimeShift",
   "short_name": "TimeShift",
   "description": "Staff shift time tracker",
-  "start_url": "./",
+  "start_url": "/TimeShift/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#FBF7FF",
   "theme_color": "#FF6B8A",
-  "categories": ["productivity", "utilities"],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "./icon-192.png",
@@ -29,5 +32,7 @@
       "description": "Quickly log a new shift",
       "url": "./?screen=log"
     }
-  ]
+  ],
+  "scope": "/TimeShift/",
+  "id": "/TimeShift/"
 }
