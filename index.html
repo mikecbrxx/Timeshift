@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<meta name="theme-color" content="#FF6B8A"/>
+<meta name="theme-color" content="#7C5CBF"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="TimeShift"/>
@@ -4400,6 +4400,19 @@ async function _tsRunStartup() {
 
 // Run on load
 _tsRunStartup();
+</script>
+
+<script>
+  // ── SERVICE WORKER REGISTRATION ──
+  // Registers sw.js so Chrome shows the "Install app" prompt
+  // and the PWA behaves correctly on both Android and iOS.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('TimeShift SW registered:', reg.scope))
+        .catch(err => console.warn('TimeShift SW registration failed:', err));
+    });
+  }
 </script>
 </body>
 </html>
